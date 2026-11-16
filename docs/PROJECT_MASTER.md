@@ -1,4 +1,4 @@
-# Documento maestro — Python Venv Manager
+# Documento maestro — Python Venv Tools
 
 ## Objetivo
 Administrar proyectos Python en Windows y Linux sin sincronizar entornos, caché ni configuración particular por Dropbox. Mantener comandos globales, GUI y lanzadores independientes.

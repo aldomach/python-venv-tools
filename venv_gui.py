@@ -8,13 +8,13 @@ import venv_manager as core
 
 class App(tk.Tk):
     def __init__(self):
-        super().__init__(); self.title('Python Venv Manager 1.2'); self.geometry('1050x780'); self.minsize(900,680)
+        super().__init__(); self.title('Python Venv Tools 1.2.1'); self.geometry('1050x780'); self.minsize(900,680)
         self.q=queue.Queue(); self.busy=False; self.records={}
         self.vars={k:tk.StringVar() for k in ('project','name','base','python','cache','entry','engine')}
         self.local=tk.BooleanVar(); self.no_cache=tk.BooleanVar()
         self.install_requirements=tk.BooleanVar(value=True); self.upgrade_pip=tk.BooleanVar(value=True)
         outer=ttk.Frame(self,padding=12); outer.pack(fill='both',expand=True)
-        ttk.Label(outer,text='Python Venv Manager',font=('TkDefaultFont',18,'bold')).pack(anchor='w')
+        ttk.Label(outer,text='Python Venv Tools',font=('TkDefaultFont',18,'bold')).pack(anchor='w')
         self.tree=ttk.Treeview(outer,columns=('path','env'),show='tree headings',height=6)
         self.tree.heading('#0',text='Proyecto'); self.tree.heading('path',text='Carpeta'); self.tree.heading('env',text='Entorno'); self.tree.column('#0',width=160); self.tree.column('path',width=370); self.tree.column('env',width=350)
         self.tree.pack(fill='x',pady=8); self.tree.bind('<<TreeviewSelect>>',self.select)

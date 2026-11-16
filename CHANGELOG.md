@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+- Rename to Python Venv Tools; add English README and repository metadata.
+- Preserve project settings and environment locations.
+- Reconstruct release history from original archives.
+
 ## 1.2
 - Editor de requirements con creación, guardado, apertura externa y recarga.
 - Escaneo AST con candidatos revisables, comparación, instalación/actualización y freeze.

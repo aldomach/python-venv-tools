@@ -80,7 +80,7 @@ def options(mode, argv):
         p.add_argument('--no-upgrade-pip', action='store_true', help='Omitir la actualizacion de pip')
     if mode == 'requirements':
         g = p.add_mutually_exclusive_group(required=True)
-        for flag in ('scan','install','upgrade','freeze','compare'):
+        for flag in ('scan','install','upgrade','freeze','compare','check-env'):
             g.add_argument('--'+flag, action='store_true')
         p.add_argument('--json', action='store_true', help='Salida JSON para scan/compare')
         p.add_argument('--output', help='Archivo nuevo para freeze; no sobrescribe')
@@ -227,6 +227,9 @@ def requirements(a,d,venv,python,env,marker):
     if not python.is_file() or not marker.is_file(): fail('Primero ejecuta setup_venv para registrar el entorno.')
     verify(python,venv,env)
     pip=[python,'-m','pip','--require-virtualenv','--isolated']
+    if a.check_env:
+        required(pip+['check'],env)
+        return 0
     if a.freeze:
         out=captured(pip+['freeze'],env)
         if a.output:

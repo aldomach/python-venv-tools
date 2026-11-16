@@ -10,6 +10,9 @@ import re
 import shutil
 import subprocess
 import sys
+if not getattr(sys, "frozen", False):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import dependencies
 
 WINDOWS = os.name == 'nt'
 PROJECT = Path.cwd().resolve()
@@ -71,9 +74,16 @@ def options(mode, argv):
     c.add_argument('--cache', dest='no_cache', action='store_false')
     p.set_defaults(no_cache=None)
     p.add_argument('--verbose', action='store_true')
+    p.add_argument('--engine', choices=('pip','uv'), help='Motor de instalación de requirements')
     if mode == 'setup':
         p.add_argument('--no-requirements', action='store_true', help='Omitir la instalacion de requirements.txt')
         p.add_argument('--no-upgrade-pip', action='store_true', help='Omitir la actualizacion de pip')
+    if mode == 'requirements':
+        g = p.add_mutually_exclusive_group(required=True)
+        for flag in ('scan','install','upgrade','freeze','compare'):
+            g.add_argument('--'+flag, action='store_true')
+        p.add_argument('--json', action='store_true', help='Salida JSON para scan/compare')
+        p.add_argument('--output', help='Archivo nuevo para freeze; no sobrescribe')
     if mode in ('run', 'launcher'):
         p.add_argument('--entry', help='Archivo Python a ejecutar (main.py por defecto)')
         p.add_argument('--check', action='store_true', help='Verificar aislamiento y dependencias antes de ejecutar')
@@ -81,9 +91,9 @@ def options(mode, argv):
 
 
 def settings(a, old):
-    d = dict(project=KEY, name=PROJECT.name, base=str(BASE), local=False, python=None, cache_base=str(CACHE), no_cache=False)
+    d = dict(project=KEY, name=PROJECT.name, base=str(BASE), local=False, python=None, cache_base=str(CACHE), no_cache=False, engine="pip")
     d.update(old)
-    for k, v in [('name', a.name), ('base', a.path), ('local', a.local), ('python', a.python), ('cache_base', a.cache_path), ('no_cache', a.no_cache)]:
+    for k, v in [('name', a.name), ('base', a.path), ('local', a.local), ('python', a.python), ('cache_base', a.cache_path), ('no_cache', a.no_cache), ('engine', a.engine)]:
         if v is not None:
             d[k] = v
     name = d['name']
@@ -120,14 +130,21 @@ def required(args, env):
 
 def interpreter(selection):
     if not selection:
-        return [sys.executable]
+        if not getattr(sys, 'frozen', False):
+            return [sys.executable]
+        if WINDOWS and shutil.which('py'):
+            return ['py','-3']
+        for name in ('python3','python'):
+            candidate=shutil.which(name)
+            if candidate: return [candidate]
+        fail('No se encontró Python instalado. Instala Python o usa --python RUTA.')
     if re.fullmatch(r'\d+(?:\.\d+){0,2}', selection):
         if WINDOWS and shutil.which('py'):
             return ['py', '-' + selection]
         candidate = shutil.which('python' + selection)
         if candidate:
             return [candidate]
-        if '.'.join(map(str, sys.version_info[:len(selection.split('.'))])) == selection:
+        if not getattr(sys,'frozen',False) and '.'.join(map(str, sys.version_info[:len(selection.split('.'))])) == selection:
             return [sys.executable]
         fail('No se encontro Python ' + selection)
     candidate = shutil.which(selection) or (str(absolute(selection)) if absolute(selection).is_file() else None)
@@ -181,7 +198,58 @@ def generate_launcher(d, venv, python, cache, entry):
     print('Lanzador creado:', target)
 
 
+def install_command(d,python,req,upgrade=False):
+    if d.get('engine')=='uv':
+        uv=shutil.which('uv')
+        if not uv: fail('uv no está instalado o no está en PATH.')
+        return [uv,'--no-config','pip','install','--python',python]+(['--upgrade'] if upgrade else [])+['-r',req]
+    return [python,'-m','pip','--require-virtualenv','--isolated','install','--no-compile']+(['--upgrade'] if upgrade else [])+['-r',req]
+
+def captured(args,env):
+    r=call(args,env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8',errors='replace')
+    if r.returncode: fail(r.stderr.strip() or 'Error consultando Python')
+    return r.stdout
+
+def requirements(a,d,venv,python,env,marker):
+    env['PIP_CONFIG_FILE']=os.devnull
+    env['PYTHONUTF8']='1'
+    req=PROJECT/'requirements.txt'
+    if a.scan:
+        command=[python] if python.is_file() else interpreter(d['python'])
+        if python.is_file(): verify(python,venv,env)
+        metadata=json.loads(captured(command+['-I','-B','-c',dependencies.METADATA_CODE],env))
+        result=dependencies.scan(PROJECT,metadata['stdlib'],metadata['installed'],[venv])
+        if a.json: print(json.dumps(result,ensure_ascii=True))
+        else:
+            for item in result['dependencies']: print(item['package']+'  # '+item['module']+' ('+item['source']+')')
+            for warning in result['warnings']: print('[AVISO] '+warning,file=sys.stderr)
+        return 0
+    if not python.is_file() or not marker.is_file(): fail('Primero ejecuta setup_venv para registrar el entorno.')
+    verify(python,venv,env)
+    pip=[python,'-m','pip','--require-virtualenv','--isolated']
+    if a.freeze:
+        out=captured(pip+['freeze'],env)
+        if a.output:
+            with absolute(a.output).open('x',encoding='utf-8') as f: f.write(out)
+        else: print(out,end='')
+        return 0
+    if not req.is_file(): fail('No existe requirements.txt. Créalo o escanea el proyecto.')
+    if a.compare:
+        data=json.loads(captured([python,'-I','-B','-c',dependencies.COMPARE_CODE,req],env))
+        if a.json: print(json.dumps(data,ensure_ascii=True))
+        else:
+            for line,v,status in data['requirements']: print(f'{line} | {v or "—"} | {status}')
+            print('Otros paquetes (incluye dependencias indirectas): '+', '.join(data['additional']))
+        return 0
+    required(install_command(d,python,req,a.upgrade),env)
+    required(pip+['check'],env)
+    return 0
+
+
 def main():
+    if len(sys.argv)<2 or sys.argv[1] not in ("setup","run","launcher","requirements"):
+        print("Uso: venv_cli {setup|run|launcher|requirements} --help")
+        return 0 if len(sys.argv)<2 or sys.argv[1]=="--help" else 2
     mode = sys.argv[1]
     argv = sys.argv[2:]
     extra = []
@@ -205,8 +273,12 @@ def main():
         fail('Entorno externo existente sin identificador de propietario. Usa otro --name o --path, o mueve el entorno anterior manualmente.')
     if a.verbose or mode == 'setup':
         print('Proyecto:', PROJECT, '\nEntorno:', venv, '\nCache:', 'sin escritura' if d['no_cache'] else cache, '\nConfiguracion:', CONFIG, flush=True)
+    if mode == 'requirements':
+        return requirements(a,d,venv,python,env,marker)
     if mode == 'setup':
         req = PROJECT / 'requirements.txt'
+        if d['engine']=='uv' and not shutil.which('uv') and req.is_file() and not a.no_requirements:
+            fail('uv no está instalado o no está en PATH.')
         if not python.is_file():
             if venv.exists():
                 fail('Entorno incompleto. Conserva o mueve esa carpeta antes de recrearlo.')
@@ -234,7 +306,7 @@ def main():
         if a.no_requirements:
             print('Instalacion de requirements.txt omitida por parametro.')
         elif req.is_file():
-            required(pip + ['install', '--no-compile', '-r', req], env)
+            required(install_command(d,python,req), env)
         elif req.exists():
             fail('requirements.txt existe pero no es un archivo regular.')
         else:

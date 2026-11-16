@@ -3,7 +3,7 @@ Unicode true
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 Name "Python Venv Manager"
-OutFile "PythonVenvManager-Setup.exe"
+OutFile "release\PythonVenvManager-1.2-Setup.exe"
 InstallDir "C:\Programs\venv-tools"
 InstallDirRegKey HKLM "Software\PythonVenvManager" "InstallDir"
 RequestExecutionLevel admin
@@ -16,27 +16,20 @@ RequestExecutionLevel admin
 Section "Instalar"
  SetShellVarContext all
  SetOutPath "$INSTDIR"
- File "venv_manager.py"
- File "venv_gui.py"
- File "setup_venv.bat"
- File "venv_run.bat"
- File "venv_launcher.bat"
- File "venv_gui.bat"
- File "README.md"
- File "path_helper.ps1"
+ File /r "dist\VenvManager\*"
  WriteRegStr HKLM "Software\PythonVenvManager" "InstallDir" "$INSTDIR"
  WriteUninstaller "$INSTDIR\Uninstall.exe"
  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "DisplayName" "Python Venv Manager"
  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
- WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "DisplayVersion" "1.1.0"
+ WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "DisplayVersion" "1.2.0"
  CreateDirectory "$SMPROGRAMS\Python Venv Manager"
- CreateShortcut "$SMPROGRAMS\Python Venv Manager\Python Venv Manager.lnk" "$INSTDIR\venv_gui.bat"
+ CreateShortcut "$SMPROGRAMS\Python Venv Manager\Python Venv Manager.lnk" "$INSTDIR\VenvManager.exe"
  CreateShortcut "$SMPROGRAMS\Python Venv Manager\Desinstalar.lnk" "$INSTDIR\Uninstall.exe"
  ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\path_helper.ps1" -Action Add -Directory "$INSTDIR"' $0
  ${If} $0 != 0
  MessageBox MB_ICONEXCLAMATION "No se pudo actualizar PATH. Agregue manualmente $INSTDIR al PATH del sistema."
  ${EndIf}
- MessageBox MB_OK "Se requiere Python 3.8 o posterior instalado (con Tkinter para la interfaz). Abra una terminal nueva para usar los comandos."
+ MessageBox MB_OK "El gestor incluye su propio runtime. Para crear entornos instala Python. Abra una terminal nueva para usar los comandos."
 SectionEnd
 Section "Uninstall"
  SetShellVarContext all
@@ -44,6 +37,10 @@ Section "Uninstall"
  ${If} $0 != 0
  MessageBox MB_ICONEXCLAMATION "No se pudo quitar la entrada de PATH. Puede quitarla manualmente."
  ${EndIf}
+ Delete "$INSTDIR\VenvManager.exe"
+ Delete "$INSTDIR\venv_cli.exe"
+ Delete "$INSTDIR\venv_requirements.bat"
+ RMDir /r "$INSTDIR\_internal"
  Delete "$INSTDIR\venv_manager.py"
  Delete "$INSTDIR\venv_gui.py"
  Delete "$INSTDIR\setup_venv.bat"

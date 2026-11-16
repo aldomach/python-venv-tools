@@ -1,20 +1,22 @@
-# Python Venv Manager 1.1
+# Python Venv Manager 1.2
 
 Administrador centralizado de entornos virtuales Python para Windows y Linux. Interfaz gráfica Tkinter y comandos de consola. No requiere paquetes de terceros para funcionar.
 
 ## Instalación en Windows
 
-Requisitos: Windows 10/11, Python 3.8 o posterior instalado (se recomienda 3.11+), con el launcher `py` o `python` disponible y Tcl/Tk para la interfaz gráfica. El instalador no instala Python ni necesita NSIS en las computadoras de destino.
+La distribución compilada incorpora el runtime del gestor. Para crear entornos se necesita Python instalado (3.8+; recomendado 3.11+). El equipo de compilación necesita Python con Tkinter, NSIS y acceso a PyPI.
 
-1. En la PC que tiene NSIS instalado, descomprimir el paquete completo.
-2. Ejecutar `build_installer.bat`. También se puede abrir `installer.nsi` con MakeNSISW y compilar.
-3. El resultado esperado es `PythonVenvManager-Setup.exe`, junto a los fuentes.
-4. Ejecutar ese EXE en la PC de destino. Por defecto se instala en `C:\Programs\venv-tools`, agrega esa carpeta al PATH del sistema y crea accesos en el menú Inicio. Requiere permisos de administrador (UAC) para instalar el gestor para todos los usuarios. Los proyectos y sus configuraciones siguen siendo individuales. Si ya instalaste la versión 1.0 por usuario, desinstálala antes de instalar la 1.1 para evitar comandos duplicados en PATH; los entornos se conservan.
-5. Abrir una consola nueva. Ejecutar `venv_gui` o abrir Python Venv Manager desde Inicio.
+1. Descomprimir el código fuente en una carpeta de Windows.
+2. Ejecutar `build_all.bat` (compila PyInstaller y NSIS).
+3. Se generan `release\PythonVenvManager-1.2-Setup.exe` y `release\PythonVenvManager-1.2-Portable.zip`.
+4. Instalar el EXE; por defecto usa `C:\Programs\venv-tools`, PATH del sistema y menú Inicio. Requiere UAC.
+5. Abrir una consola nueva y ejecutar `venv_gui`.
+
+Para usar el código sin compilar: ejecutar `venv_gui.bat` o `python venv_gui.py`. Ver `docs/BUILD_WINDOWS.md`. No se incluyen binarios precompilados.
 
 La ruta predeterminada de entornos es `C:\venvs`, que en algunas PCs requiere que un administrador cree la carpeta y conceda permisos de escritura al usuario. Alternativamente usar `--path "%LOCALAPPDATA%\venvs"`. El gestor nunca eleva permisos automáticamente. La caché por defecto sigue siendo `C:\venvs\pycache`; seleccionar `--cache-path "%LOCALAPPDATA%\venvs\pycache"` si no hay permiso.
 
-**Estado del instalador:** se entregan el fuente NSIS y el compilador BAT; el EXE no está incluido porque NSIS no está disponible en el entorno de desarrollo. La compilación y ejecución nativa de Windows deben verificarse en Windows. El instalador no está firmado.
+**Estado del instalador:** se entregan los fuentes, configuración de PyInstaller y archivos BAT; el EXE debe compilarse en Windows. La compilación y ejecución nativa de Windows deben verificarse en Windows. El instalador no está firmado.
 
 ## Instalación en Linux
 
@@ -82,7 +84,7 @@ La configuración exitosa de setup queda guardada por ruta absoluta del proyecto
 
 Ejecutar `venv_gui` o `python venv_gui.py`. Seleccionar la raíz del proyecto, completar las opciones y usar Crear / instalar. Las casillas «Instalar requirements.txt si existe» y «Actualizar pip» están marcadas inicialmente; se pueden desmarcar para una creación limpia sin descargas. La lista incluye los proyectos registrados por setup. Permite configurar ubicación, nombre, intérprete, caché y entrada; crear entorno, ejecutar, verificar y ejecutar, generar lanzador, consultar Python, gestionar paquetes (listar, instalar, actualizar uno, desinstalar con confirmación), comprobar dependencias, exportar pip freeze y abrir la carpeta del entorno. Las operaciones que pueden tardar muestran salida en un registro y se realizan en un hilo de trabajo. En Linux el botón detectar Python muestra la versión del intérprete del gestor; no enumera todas las instalaciones. En Windows usa `py -0p`.
 
-Limitaciones actuales: no incluye borrado de entornos, limpieza de caché, terminal activada, medición de espacio, importación/exportación de configuración ni registro automático de entornos ajenos. Se priorizó evitar cambios destructivos. El gestor no genera automáticamente requirements.txt de dependencias directas: pip freeze exporta todas las versiones a un archivo elegido por el usuario.
+Limitaciones actuales: no incluye borrado de entornos, limpieza de caché, terminal activada, medición de espacio, importación/exportación de configuración ni registro automático de entornos ajenos. Se priorizó evitar cambios destructivos. El escáner propone dependencias directas, sujetas a revisión; pip freeze exporta las versiones instaladas.
 
 ## Ubicaciones
 
@@ -99,13 +101,36 @@ Linux respeta XDG_DATA_HOME, XDG_CONFIG_HOME y XDG_CACHE_HOME si son rutas absol
 
 ## Desinstalación
 
-Windows: desde Aplicaciones instaladas o el menú Inicio. Requiere permisos de administrador. Elimina el gestor y su entrada PATH del sistema, pero conserva entornos, proyectos y configuración. Los lanzadores autónomos siguen funcionando si el entorno existe. Linux: quitar los enlaces de los cuatro comandos de ~/.local/bin y la carpeta instalada del gestor, después de comprobar que pertenecen a esta herramienta; conservar los entornos y configuración.
+Windows: desde Aplicaciones instaladas o el menú Inicio. Requiere permisos de administrador. Elimina el gestor y su entrada PATH del sistema, pero conserva entornos, proyectos y configuración. Los lanzadores autónomos siguen funcionando si el entorno existe. Linux: quitar los enlaces de los cinco comandos de ~/.local/bin y la carpeta instalada del gestor, después de comprobar que pertenecen a esta herramienta; conservar los entornos y configuración.
 
 ## Seguridad y verificación
 
-No se instala nada fuera del entorno virtual mediante pip. Se omite configuración global de pip y variables Python/PIP heredadas para evitar contaminación; esto puede requerir configuración adicional en redes con repositorios privados. Los entornos no son una zona de seguridad: ejecutar solo código y paquetes confiables. No ejecutar simultáneamente varias operaciones de instalación sobre el mismo entorno. El gestor no valida el código de la aplicación.
+Las operaciones de paquetes del gestor se dirigen al entorno virtual validado. Se omite configuración global de pip y variables Python/PIP heredadas para evitar contaminación; esto puede requerir configuración adicional en redes con repositorios privados. Los entornos no son una zona de seguridad: ejecutar solo código y paquetes confiables. No ejecutar simultáneamente varias operaciones de instalación sobre el mismo entorno. El gestor no valida el código de la aplicación.
 
-Pruebas en Linux: sintaxis Python y Bash, generación de lanzador, configuración persistente y ejecución con un entorno aislado de prueba. Interfaz gráfica y Windows requieren validación nativa. El instalador NSIS no se pudo compilar aquí.
+Pruebas y limitaciones: ver `docs/TESTING.md`.
+
+## Dependencias (nuevo en 1.2)
+
+En la UI, abrir **Dependencias / requirements.txt**. Se puede crear, editar, guardar, recargar y abrir el archivo en el editor externo. Instalar conserva versiones compatibles; Actualizar solicita nuevas versiones dentro de las restricciones. No elimina paquetes adicionales. Comparar analiza el archivo guardado; extras, URLs, includes y opciones complejas requieren revisión. Exportar lock escribe un archivo nuevo. El escáner analiza AST sin ejecutar el proyecto, descarta módulos estándar y locales, y sugiere nombres según metadatos del intérprete y una tabla de alias. Seleccionar las filas deseadas antes de agregarlas al editor; revisar y guardar antes de instalar. No detecta de forma fiable importaciones dinámicas, dependencias opcionales, módulos nativos o nombres ambiguos. No instala automáticamente las sugerencias.
+
+```cmd
+venv_requirements --scan
+venv_requirements --compare
+venv_requirements --install
+venv_requirements --upgrade
+venv_requirements --freeze --output requirements-lock.txt
+```
+
+`--json` está disponible para scan y compare. `--freeze` sin output imprime resultados. Para resolver requirements con uv (debe estar instalado y en PATH):
+
+```cmd
+setup_venv --engine uv
+venv_requirements --upgrade
+```
+
+El motor queda guardado al completar setup. `--engine pip` permite volver al motor clásico. Por diseño, venv y pip siguen siendo responsables de la creación, validación y operaciones individuales de paquetes de la UI; uv se usa para instalar/actualizar requirements. No se descarga uv automáticamente. Las opciones de requirements no guardan cambios de configuración. No usar motores simultáneamente sobre el mismo entorno.
+
+Documentación: [proyecto maestro](docs/PROJECT_MASTER.md), [arquitectura](docs/ARCHITECTURE.md), [roadmap](docs/ROADMAP.md), [funciones](docs/FEATURES.md), [compilación](docs/BUILD_WINDOWS.md), [pruebas](docs/TESTING.md).
 
 ---
 

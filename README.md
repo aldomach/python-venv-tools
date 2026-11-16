@@ -50,3 +50,7 @@ Use `setup_venv --local` for a local environment or `setup_venv --no-requirement
 The source history was reconstructed from archived snapshots; commit dates record the reconstruction, not the original development dates. The Windows binaries are not included in this repository; native validation is still required.
 
 Author: Aldo Machado.
+
+### Dependency manager (1.2.2)
+
+Editing, scanning and environment operations are separated. Only explicit Save writes requirements.txt; existing contents are backed up under the local configuration directory (`requirements-backups`) before replacement. Install/upgrade use the saved file, and scanning only proposes additions to the editor. Lock exports never overwrite existing files. Use `venv_requirements --check-env` for read-only package verification.

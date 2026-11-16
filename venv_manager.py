@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 WINDOWS = os.name == 'nt'
-PROJECT = Path(__file__).resolve().parent
+PROJECT = Path.cwd().resolve()
 HOME = Path.home()
 
 def xdg(var, default):
@@ -70,7 +70,7 @@ def options(mode, argv):
     c.add_argument('--cache', dest='no_cache', action='store_false')
     p.set_defaults(no_cache=None)
     p.add_argument('--verbose', action='store_true')
-    if mode == 'run':
+    if mode in ('run', 'launcher'):
         p.add_argument('--entry', help='Archivo Python a ejecutar (main.py por defecto)')
         p.add_argument('--check', action='store_true', help='Verificar aislamiento y dependencias antes de ejecutar')
     return p.parse_args(argv)
@@ -149,6 +149,34 @@ def verify(python, venv, env):
     required([python, '-I', '-B', '-c', code, venv], env)
 
 
+def generate_launcher(d, venv, python, cache, entry):
+    import shlex
+    if WINDOWS:
+        target = PROJECT / 'run_project.bat'
+        def q(x):
+            return str(x).replace('%', '%%')
+        lines = ['@echo off', 'setlocal DisableDelayedExpansion', 'cd /d "%~dp0"',
+                 'set "PYTHONHOME="', 'set "PYTHONPATH="', 'set "PYTHONNOUSERSITE=1"',
+                 'set "PYTHONPYCACHEPREFIX=' + q(cache) + '"',
+                 'set "PYTHONDONTWRITEBYTECODE=' + ('1' if d['no_cache'] else '') + '"',
+                 'set "VIRTUAL_ENV=' + q(venv) + '"', 'set "PATH=' + q(python.parent) + ';%PATH%"',
+                 '"' + q(python) + '" "' + q(entry) + '" %*', 'exit /b %errorlevel%']
+    else:
+        target = PROJECT / 'run_project.sh'
+        lines = ['#!/usr/bin/env bash', 'cd -- "$(dirname -- "$0")" || exit 1',
+                 'unset PYTHONHOME PYTHONPATH PYTHONDONTWRITEBYTECODE', 'export PYTHONNOUSERSITE=1',
+                 'export PYTHONPYCACHEPREFIX=' + shlex.quote(str(cache)),
+                 'export VIRTUAL_ENV=' + shlex.quote(str(venv)),
+                 'export PATH=' + shlex.quote(str(python.parent)) + ':"$PATH"']
+        if d['no_cache']: lines.append('export PYTHONDONTWRITEBYTECODE=1')
+        lines.append('exec ' + shlex.quote(str(python)) + ' ' + shlex.quote(str(entry)) + ' "$@"')
+    if target.exists():
+        fail('El lanzador ya existe: ' + str(target) + '. Renombralo antes de generar otro.')
+    target.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+    if not WINDOWS: target.chmod(0o755)
+    print('Lanzador creado:', target)
+
+
 def main():
     mode = sys.argv[1]
     argv = sys.argv[2:]
@@ -156,7 +184,7 @@ def main():
     if '--' in argv:
         pos = argv.index('--')
         argv, extra = argv[:pos], argv[pos+1:]
-        if mode != 'run':
+        if mode not in ('run', 'launcher'):
             fail('Los argumentos despues de -- son solo para run')
     a = options(mode, argv)
     d = settings(a, load())
@@ -212,6 +240,9 @@ def main():
     entry = absolute(a.entry or (PROJECT / 'main.py'))
     if not entry.is_file():
         fail('No se encontro el archivo: ' + str(entry))
+    if mode == 'launcher':
+        generate_launcher(d, venv, python, cache, entry)
+        return 0
     if a.check:
         verify(python, venv, env)
         required([python, '-m', 'pip', '--require-virtualenv', 'check'], env)

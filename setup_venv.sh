@@ -1,4 +1,2 @@
 #!/usr/bin/env bash
-set -e
-cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
-exec python3 -I -B "$PWD/venv_manager.py" setup "$@"
+exec python3 -I -B "$(dirname -- "${BASH_SOURCE[0]}")/venv_manager.py" setup "$@"

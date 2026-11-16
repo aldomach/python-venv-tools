@@ -1,123 +1,103 @@
-# Python Venv Tools
+# Python Venv Manager 1.0
 
-Scripts reutilizables para crear entornos virtuales y ejecutar proyectos Python sin sincronizar dependencias ni archivos de caché con Dropbox.
+Administrador centralizado de entornos virtuales Python para Windows y Linux. Interfaz gráfica Tkinter y comandos de consola. No requiere paquetes de terceros para funcionar.
 
-## Archivos
+## Instalación en Windows
 
-| Archivo | Función |
+Requisitos: Windows 10/11, Python 3.8 o posterior instalado (se recomienda 3.11+), con el launcher `py` o `python` disponible y Tcl/Tk para la interfaz gráfica. El instalador no instala Python ni necesita NSIS en las computadoras de destino.
+
+1. En la PC que tiene NSIS instalado, descomprimir el paquete completo.
+2. Ejecutar `build_installer.bat`. También se puede abrir `installer.nsi` con MakeNSISW y compilar.
+3. El resultado esperado es `PythonVenvManager-Setup.exe`, junto a los fuentes.
+4. Ejecutar ese EXE en la PC de destino. Por defecto se instala en `%LOCALAPPDATA%\Programs\PythonVenvManager`, agrega esa carpeta al PATH del usuario y crea accesos en el menú Inicio. No requiere permisos de administrador para instalar el gestor.
+5. Abrir una consola nueva. Ejecutar `venv_gui` o abrir Python Venv Manager desde Inicio.
+
+La ruta predeterminada de entornos es `C:\venvs`, que en algunas PCs requiere que un administrador cree la carpeta y conceda permisos de escritura al usuario. Alternativamente usar `--path "%LOCALAPPDATA%\venvs"`. El gestor nunca eleva permisos automáticamente. La caché por defecto sigue siendo `C:\venvs\pycache`; seleccionar `--cache-path "%LOCALAPPDATA%\venvs\pycache"` si no hay permiso.
+
+**Estado del instalador:** se entregan el fuente NSIS y el compilador BAT; el EXE no está incluido porque NSIS no está disponible en el entorno de desarrollo. La compilación y ejecución nativa de Windows deben verificarse en Windows. El instalador no está firmado.
+
+## Instalación en Linux
+
+Instalar Python 3, el módulo venv y Tkinter (en Debian/Ubuntu: `sudo apt install python3 python3-venv python3-tk`). Desde la carpeta descomprimida:
+
+```bash
+bash install.sh
+```
+
+Instala en `~/.local/share/python-venv-tools` (o XDG_DATA_HOME), con comandos en `~/.local/bin`. Verificar que esta última carpeta esté en PATH. No requiere sudo para instalar el gestor.
+
+## Uso centralizado
+
+Ejecutar los comandos **desde la raíz del proyecto**, no desde la carpeta del gestor.
+
+```cmd
+cd /d "C:\Users\usuario\Dropbox\mi_proyecto"
+setup_venv --python 3.11
+venv_run
+venv_launcher
+```
+
+En Linux se usan los mismos nombres sin extensión. Los scripts `run.bat` y `run.sh` se incluyen para uso manual, pero no se instalan en PATH: se prefiere `venv_run` para evitar colisiones con otros comandos o un run.bat antiguo.
+
+`setup_venv` requiere requirements.txt, crea el entorno si falta, comprueba su aislamiento, actualiza pip, instala dependencias y ejecuta pip check. No actualiza automáticamente todas las dependencias existentes: pip conserva las versiones compatibles con requirements.txt.
+
+`venv_run` localiza la configuración del proyecto, prepara la caché y ejecuta main.py. No instala paquetes ni accede a Internet por sí mismo. `--check` agrega validaciones.
+
+### Opciones
+
+| Opción | Uso |
 |---|---|
-| `setup_venv.bat` / `setup_venv.sh` | Crea el entorno, actualiza pip, instala `requirements.txt` y verifica dependencias. |
-| `run.bat` / `run.sh` | Ejecuta el proyecto sin instalar ni actualizar paquetes. |
-| `venv_manager.py` | Motor común de los cuatro scripts. Debe permanecer junto a ellos. |
-| `README.md` | Documentación. |
+| `--name NOMBRE` | Nombre del proyecto, por defecto la carpeta actual. |
+| `--path RUTA` | Base externa de entornos. |
+| `--local` / `--external` | Entorno local (venv en Windows, .venv en Linux) o externo. |
+| `--python 3.11` | Versión o ruta del intérprete. En run verifica la versión si se especifica. |
+| `--cache-path RUTA` | Base de caché externa. |
+| `--no-cache` / `--cache` | Desactiva o reactiva escritura de bytecode. |
+| `--verbose` | Muestra rutas y configuración. |
+| `--entry archivo.py` | Entrada alternativa (run/launcher). |
+| `--check` | Verifica aislamiento y paquetes antes de ejecutar (run). |
+| `--help` | Ayuda. |
+| `-- argumentos` | Argumentos para la aplicación (run). |
 
-Copiar los cinco archivos ejecutables/de código a la raíz de cada proyecto, junto a `requirements.txt` y `main.py`. Los scripts trabajan desde su propia carpeta, independientemente del directorio desde el que se invocan. No necesitan dependencias externas al Python base (3.8 o posterior). Para aplicaciones modernas se recomienda Python 3.11 o superior según sus requisitos.
+Ejemplos:
 
-## Ubicaciones predeterminadas
+```cmd
+setup_venv --local --python 3.11
+setup_venv --external --name facturas --path D:\venvs
+venv_run --entry main.py -- --debug
+venv_launcher --entry main.py
+```
+
+La configuración exitosa de setup queda guardada por ruta absoluta del proyecto y por equipo, fuera de Dropbox. Si se mueve el proyecto, se debe reconfigurar o usar un nombre externo diferente. Las opciones de run son temporales. No comparte entornos entre proyectos con rutas diferentes; los entornos externos previos sin marca de propietario se rechazan para evitar su modificación accidental. No se borran entornos automáticamente.
+
+## Lanzador autónomo
+
+`venv_launcher` genera `run_project.bat` o `run_project.sh` en el proyecto. No requiere gestor, PATH global ni activación manual; llama directamente al intérprete y redirige la caché. Si existe un lanzador del mismo nombre, lo conserva y avisa. Renombrarlo antes de regenerar. Las rutas absolutas son específicas del equipo; no sincronizar el mismo lanzador entre equipos con configuraciones diferentes. El archivo recibe argumentos de la aplicación directamente.
+
+## Interfaz gráfica
+
+Ejecutar `venv_gui` o `python venv_gui.py`. Seleccionar la raíz del proyecto, completar las opciones y usar Crear / instalar. La lista incluye los proyectos registrados por setup. Permite configurar ubicación, nombre, intérprete, caché y entrada; crear entorno, ejecutar, verificar y ejecutar, generar lanzador, consultar Python, gestionar paquetes (listar, instalar, actualizar uno, desinstalar con confirmación), comprobar dependencias, exportar pip freeze y abrir la carpeta del entorno. Las operaciones que pueden tardar muestran salida en un registro y se realizan en un hilo de trabajo. En Linux el botón detectar Python muestra la versión del intérprete del gestor; no enumera todas las instalaciones. En Windows usa `py -0p`.
+
+Primera versión: no incluye borrado de entornos, limpieza de caché, terminal activada, medición de espacio, importación/exportación de configuración ni registro automático de entornos ajenos. Se priorizó evitar cambios destructivos. El gestor no genera automáticamente requirements.txt de dependencias directas: pip freeze exporta todas las versiones a un archivo elegido por el usuario.
+
+## Ubicaciones
 
 | Recurso | Windows | Linux |
 |---|---|---|
-| Entorno externo | `C:\venvs\<proyecto>\venv` | `~/.local/share/venvs/<proyecto>/venv` |
-| Entorno local | `venv/` | `.venv/` |
-| Caché externa | `C:\venvs\pycache\<proyecto>\<id>\<version>` | `~/.cache/python/<proyecto>/<id>/<version>` |
-| Configuración | `%LOCALAPPDATA%\python-venv-tools` | `~/.config/python-venv-tools` |
+| Base entornos | C:\venvs | ~/.local/share/venvs |
+| Entorno externo | base/nombre/venv | base/nombre/venv |
+| Entorno local | venv | .venv |
+| Base caché | C:\venvs\pycache | ~/.cache/python |
+| Configuración | %LOCALAPPDATA%\python-venv-tools | ~/.config/python-venv-tools |
 
-En Linux se respetan `XDG_DATA_HOME`, `XDG_CACHE_HOME` y `XDG_CONFIG_HOME` cuando son rutas absolutas. `<id>` identifica la ruta absoluta del proyecto y evita mezclar cachés de proyectos homónimos. `<version>` es `default` o la selección numérica de Python. En Windows, si no hay permiso de escritura en `C:\venvs`, usar `--path` y `--cache-path` con rutas propias. No es necesario ejecutar como administrador.
+Linux respeta XDG_DATA_HOME, XDG_CONFIG_HOME y XDG_CACHE_HOME si son rutas absolutas. La caché incluye nombre, identificador del proyecto y versión seleccionada (o default). Python agrega su propia etiqueta de versión a los archivos pyc. Se desactiva la compilación de paquetes durante pip install y se usa PYTHONPYCACHEPREFIX en ejecución. Esto evita nuevos __pycache__ en el código, no elimina los existentes ni garantiza que bibliotecas externas no escriban otros archivos. Si se elige entorno local, Dropbox podría sincronizar sus miles de archivos; se recomienda entorno externo.
 
-## Inicio rápido
+## Desinstalación
 
-### Windows (CMD)
+Windows: desde Aplicaciones instaladas o el menú Inicio. Elimina el gestor y su entrada PATH, pero conserva entornos, proyectos y configuración. Los lanzadores autónomos siguen funcionando si el entorno existe. Linux: quitar los enlaces de los cuatro comandos de ~/.local/bin y la carpeta instalada del gestor, después de comprobar que pertenecen a esta herramienta; conservar los entornos y configuración.
 
-```cmd
-setup_venv.bat
-run.bat
-```
+## Seguridad y verificación
 
-### Linux
+No se instala nada fuera del entorno virtual mediante pip. Se omite configuración global de pip y variables Python/PIP heredadas para evitar contaminación; esto puede requerir configuración adicional en redes con repositorios privados. Los entornos no son una zona de seguridad: ejecutar solo código y paquetes confiables. No ejecutar simultáneamente varias operaciones de instalación sobre el mismo entorno. El gestor no valida el código de la aplicación.
 
-Instalar previamente Python y su módulo venv (en Debian/Ubuntu, `sudo apt install python3 python3-venv`).
-
-```bash
-chmod +x setup_venv.sh run.sh
-./setup_venv.sh
-./run.sh
-```
-
-En Windows se utiliza `py -3` si está disponible, o `python` como alternativa. En Linux se usa `python3` del PATH. Los scripts requieren que ese intérprete de arranque siga disponible, incluso si el entorno fue creado con otra versión.
-
-## Parámetros
-
-| Opción | Setup | Run | Descripción |
-|---|:---:|:---:|---|
-| `--name NOMBRE` | Sí | Sí | Nombre del proyecto; inicialmente el de la carpeta de los scripts. |
-| `--path RUTA` | Sí | Sí | Base externa; se agrega `NOMBRE/venv`. No afecta al entorno local. |
-| `--local` | Sí | Sí | Selecciona el entorno local. |
-| `--external` | Sí | Sí | Selecciona el entorno externo. Predeterminado inicial. |
-| `--python VERSION_O_RUTA` | Sí | Sí | Setup selecciona el intérprete; run verifica la versión si se solicita explícitamente. |
-| `--cache-path RUTA` | Sí | Sí | Cambia la base de la caché externa. |
-| `--no-cache` | Sí | Sí | Evita que Python escriba archivos `.pyc` durante la ejecución normal. |
-| `--cache` | Sí | Sí | Restablece la escritura de caché externa. |
-| `--verbose` | Sí | Sí | Muestra rutas y configuración. |
-| `--help` | Sí | Sí | Ayuda de argumentos. |
-| `--entry ARCHIVO` | No | Sí | Ejecuta otro archivo en lugar de `main.py`. |
-| `--check` | No | Sí | Verifica aislamiento y ejecuta `pip check` antes de iniciar. |
-| `-- ARGUMENTOS` | No | Sí | Pasa los argumentos restantes al programa. |
-
-Las opciones de setup se guardan **solo si la instalación y las verificaciones terminan correctamente**. Run reutiliza esa configuración, pero sus cambios de parámetros son temporales. Una nueva ejecución de setup sin parámetros conserva las preferencias guardadas. Para volver a un entorno externo, especificar `--external`. Para restaurar nombre o rutas, especificarlos explícitamente. Las rutas relativas se interpretan desde la raíz del proyecto.
-
-## Ejemplos
-
-### Windows (CMD)
-
-```cmd
-setup_venv.bat --local
-setup_venv.bat --external --name facturas --path "D:\Python Envs" --python 3.11
-setup_venv.bat --cache-path "%LOCALAPPDATA%\PythonCache"
-run.bat
-run.bat --verbose --check
-run.bat --entry herramienta.py -- --archivo "Mi archivo.pdf"
-run.bat --no-cache
-```
-
-### Linux
-
-```bash
-./setup_venv.sh --local
-./setup_venv.sh --external --name facturas --path "$HOME/venvs" --python 3.11
-./setup_venv.sh --cache-path "$HOME/.cache/mis-proyectos"
-./run.sh
-./run.sh --verbose --check
-./run.sh --entry herramienta.py -- --archivo "Mi archivo.pdf"
-./run.sh --no-cache
-```
-
-Para una instalación de Python específica se puede pasar la ruta de su ejecutable mediante `--python`. No se instala Python automáticamente. Si el entorno ya existe con otra versión, se detiene sin sobrescribirlo.
-
-## Caché y Dropbox
-
-Se utiliza `PYTHONPYCACHEPREFIX` (Python 3.8+) para redirigir los archivos de bytecode de los imports fuera del proyecto. La primera ejecución puede generar caché y las siguientes reutilizarla. `--no-cache` añade `PYTHONDONTWRITEBYTECODE=1`; no borra la caché previa. Pip instala con `--no-compile` para evitar precompilación innecesaria. Herramientas que compilen explícitamente o generen su propia caché pueden ignorar estas variables. No se eliminan archivos existentes ni se controlan las cachés de editores o bibliotecas ajenas a Python.
-
-El entorno local también contiene muchos archivos, por lo que no se recomienda dentro de Dropbox. Los entornos virtuales no son portables entre equipos ni entre Windows y Linux. Si se usa Git, conviene ignorar `venv/`, `.venv/`, `__pycache__/` y `*.pyc`; `.gitignore` no impide que Dropbox sincronice archivos.
-
-## Seguridad y mantenimiento
-
-- Se ejecuta el Python del entorno directamente, sin activar el entorno en la consola. Run prepara `PATH` y `VIRTUAL_ENV` únicamente para el proceso hijo.
-- Setup comprueba el prefijo de Python, el aislamiento de paquetes de usuario/sistema y la ubicación de pip; instala con `--require-virtualenv` y ejecuta `pip check`.
-- Se excluyen variables de entorno `PYTHON*` y `PIP_*` heredadas para evitar contaminación; se usan las variables propias de caché y aislamiento. Setup deshabilita configuraciones habituales de pip; si se requiere un índice privado, certificados o proxy configurados mediante pip, habrá que adaptar la configuración conscientemente. No es un mecanismo de seguridad para ejecutar proyectos no confiables.
-- Se utiliza un identificador de propietario dentro de los entornos. Si dos proyectos de carpetas diferentes comparten nombre, usar `--name` o `--path` distintos. No se adoptan automáticamente entornos externos antiguos sin identificador; se recomienda utilizar otro nombre o mover el entorno anterior manualmente tras comprobar que no se usa. Los entornos locales existentes sí se pueden adoptar tras validar su aislamiento.
-- Si falla la creación y queda una carpeta incompleta, no se elimina automáticamente. Moverla o elegir otra ubicación antes de reintentar.
-- `run` no accede a Internet ni ejecuta pip en condiciones normales. El motor común añade un inicio breve de Python; la aplicación puede realizar sus propias operaciones. No se necesita dejar una consola activada. Los códigos de salida se conservan durante la ejecución normal.
-- No se incluye una pausa al cerrar: ejecutar desde CMD/terminal para ver los errores. En Windows, un `.bat` invocado con doble clic puede cerrar su ventana al terminar.
-- No ejecutar dos instalaciones simultáneas sobre el mismo entorno.
-
-## Verificaciones
-
-```cmd
-run.bat --check --verbose
-```
-
-```bash
-./run.sh --check --verbose
-```
-
-La comprobación verifica dependencias declaradas, no garantiza que todas las funciones de la aplicación o sus DLL funcionen. Si se cambia de equipo o se mueve el proyecto, ejecutar setup de nuevo con una ubicación apropiada.
+Pruebas en Linux: sintaxis Python y Bash, generación de lanzador, configuración persistente y ejecución con un entorno aislado de prueba. Interfaz gráfica y Windows requieren validación nativa. El instalador NSIS no se pudo compilar aquí.

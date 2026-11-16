@@ -1,6 +1,6 @@
 param([ValidateSet('Add','Remove')][string]$Action,[Parameter(Mandatory=$true)][string]$Directory)
 $ErrorActionPreference = 'Stop'
-$key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Environment')
+$key = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment',$true)
 try {
  $old = [string]$key.GetValue('Path','',[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
  $parts = @($old -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ine $Directory.TrimEnd('\') })

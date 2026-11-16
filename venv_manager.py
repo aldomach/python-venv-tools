@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Portable project virtual environment launcher (Python 3.8+)."""
+# Autor: Aldo Machado
 import argparse
 import hashlib
 import json
@@ -70,6 +71,9 @@ def options(mode, argv):
     c.add_argument('--cache', dest='no_cache', action='store_false')
     p.set_defaults(no_cache=None)
     p.add_argument('--verbose', action='store_true')
+    if mode == 'setup':
+        p.add_argument('--no-requirements', action='store_true', help='Omitir la instalacion de requirements.txt')
+        p.add_argument('--no-upgrade-pip', action='store_true', help='Omitir la actualizacion de pip')
     if mode in ('run', 'launcher'):
         p.add_argument('--entry', help='Archivo Python a ejecutar (main.py por defecto)')
         p.add_argument('--check', action='store_true', help='Verificar aislamiento y dependencias antes de ejecutar')
@@ -203,8 +207,6 @@ def main():
         print('Proyecto:', PROJECT, '\nEntorno:', venv, '\nCache:', 'sin escritura' if d['no_cache'] else cache, '\nConfiguracion:', CONFIG, flush=True)
     if mode == 'setup':
         req = PROJECT / 'requirements.txt'
-        if not req.is_file():
-            fail('No se encontro requirements.txt')
         if not python.is_file():
             if venv.exists():
                 fail('Entorno incompleto. Conserva o mueve esa carpeta antes de recrearlo.')
@@ -225,8 +227,18 @@ def main():
         # Ignore global pip configuration and require an actual virtual environment.
         env['PIP_CONFIG_FILE'] = os.devnull
         pip = [python, '-m', 'pip', '--require-virtualenv', '--isolated']
-        required(pip + ['install', '--upgrade', '--no-compile', 'pip'], env)
-        required(pip + ['install', '--no-compile', '-r', req], env)
+        if not a.no_upgrade_pip:
+            required(pip + ['install', '--upgrade', '--no-compile', 'pip'], env)
+        else:
+            print('Actualizacion de pip omitida.')
+        if a.no_requirements:
+            print('Instalacion de requirements.txt omitida por parametro.')
+        elif req.is_file():
+            required(pip + ['install', '--no-compile', '-r', req], env)
+        elif req.exists():
+            fail('requirements.txt existe pero no es un archivo regular.')
+        else:
+            print('[AVISO] No se encontro requirements.txt. Se conserva el entorno sin instalar dependencias.')
         required(pip + ['check'], env)
         if not marker.exists():
             write_json(marker, {'project': KEY})

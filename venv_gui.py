@@ -1,4 +1,5 @@
 """Desktop frontend; only Python standard library is needed."""
+# Autor: Aldo Machado
 import json, os, sys, subprocess, threading, queue
 from pathlib import Path
 import tkinter as tk
@@ -7,10 +8,11 @@ import venv_manager as core
 
 class App(tk.Tk):
     def __init__(self):
-        super().__init__(); self.title('Python Venv Manager'); self.geometry('1050x720'); self.minsize(800,600)
+        super().__init__(); self.title('Python Venv Manager'); self.geometry('1050x780'); self.minsize(900,680)
         self.q=queue.Queue(); self.busy=False; self.records={}
         self.vars={k:tk.StringVar() for k in ('project','name','base','python','cache','entry')}
         self.local=tk.BooleanVar(); self.no_cache=tk.BooleanVar()
+        self.install_requirements=tk.BooleanVar(value=True); self.upgrade_pip=tk.BooleanVar(value=True)
         outer=ttk.Frame(self,padding=12); outer.pack(fill='both',expand=True)
         ttk.Label(outer,text='Python Venv Manager',font=('TkDefaultFont',18,'bold')).pack(anchor='w')
         self.tree=ttk.Treeview(outer,columns=('path','env'),show='tree headings',height=6)
@@ -22,11 +24,13 @@ class App(tk.Tk):
             ttk.Label(form,text=label).grid(row=i,column=0,sticky='w',padx=4,pady=3); ttk.Entry(form,textvariable=self.vars[k]).grid(row=i,column=1,sticky='ew',padx=4)
             if k in ('project','base','cache'): ttk.Button(form,text='…',width=4,command=lambda k=k:self.choose(k)).grid(row=i,column=2)
         ttk.Checkbutton(form,text='Entorno local',variable=self.local).grid(row=6,column=1,sticky='w'); ttk.Checkbutton(form,text='Desactivar bytecode',variable=self.no_cache).grid(row=7,column=1,sticky='w')
+        ttk.Checkbutton(form,text='Instalar requirements.txt si existe',variable=self.install_requirements).grid(row=8,column=1,sticky='w')
+        ttk.Checkbutton(form,text='Actualizar pip',variable=self.upgrade_pip).grid(row=9,column=1,sticky='w')
         for actions in [[('Crear / instalar',lambda:self.command('setup')),('Ejecutar',lambda:self.command('run')),('Verificar y ejecutar',lambda:self.command('run', ['--check'])),('Generar lanzador',lambda:self.command('launcher')),('Detectar Python',self.detect)], [('Listar paquetes',lambda:self.pip(['list'])),('Instalar paquete',lambda:self.package('install')),('Actualizar paquete',lambda:self.package('install',True)),('Desinstalar paquete',lambda:self.package('uninstall')),('Verificar paquetes',lambda:self.pip(['check'])),('Exportar lock',self.freeze),('Abrir carpeta venv',self.open_env)]]:
             bar=ttk.Frame(outer); bar.pack(fill='x',pady=3)
             for label,fn in actions: ttk.Button(bar,text=label,command=fn).pack(side='left',padx=2)
         self.log=tk.Text(outer,height=10,wrap='word',state='disabled'); self.log.pack(fill='both',expand=True,pady=6)
-        self.status=tk.StringVar(value='Listo'); ttk.Label(outer,textvariable=self.status).pack(anchor='w'); self.defaults(Path.cwd()); self.refresh(); self.after(80,self.poll)
+        self.status=tk.StringVar(value='Listo'); footer=ttk.Frame(outer); footer.pack(fill='x'); ttk.Label(footer,textvariable=self.status).pack(side='left'); ttk.Label(footer,text='Aldo',foreground='gray').pack(side='right'); self.defaults(Path.cwd()); self.refresh(); self.after(80,self.poll)
     def defaults(self,p,d=None):
         d=d or {}; vals=dict(project=str(p),name=d.get('name',p.name),base=d.get('base',str(core.BASE)),python=d.get('python') or '',cache=d.get('cache_base',str(core.CACHE)),entry='main.py')
         for k,v in vals.items():self.vars[k].set(v)
@@ -55,7 +59,10 @@ class App(tk.Tk):
         return result
     def command(self,mode,extra=None):
         args=[sys.executable,'-I','-B',str(Path(core.__file__).resolve()),mode]+self.args()+(extra or [])
-        if mode!='setup':args+=['--entry',self.vars['entry'].get()]
+        if mode=='setup':
+            if not self.install_requirements.get():args.append('--no-requirements')
+            if not self.upgrade_pip.get():args.append('--no-upgrade-pip')
+        else:args+=['--entry',self.vars['entry'].get()]
         if mode=='run':
             try: subprocess.Popen(args,cwd=self.vars['project'].get()); self.status.set('Aplicación iniciada (consulta la consola si hay errores).')
             except OSError as e:messagebox.showerror('Error',str(e))

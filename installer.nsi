@@ -3,7 +3,7 @@ Unicode true
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 Name "Python Venv Tools"
-OutFile "release\PythonVenvTools-1.2.1-Setup.exe"
+OutFile "release\PythonVenvTools-1.2.2-Setup.exe"
 InstallDir "C:\Programs\venv-tools"
 InstallDirRegKey HKLM "Software\PythonVenvManager" "InstallDir"
 RequestExecutionLevel admin
@@ -21,7 +21,7 @@ Section "Instalar"
  WriteUninstaller "$INSTDIR\Uninstall.exe"
  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "DisplayName" "Python Venv Tools"
  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
- WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "DisplayVersion" "1.2.1"
+ WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "DisplayVersion" "1.2.2"
  CreateDirectory "$SMPROGRAMS\Python Venv Tools"
  CreateShortcut "$SMPROGRAMS\Python Venv Tools\Python Venv Tools.lnk" "$INSTDIR\VenvTools.exe"
  CreateShortcut "$SMPROGRAMS\Python Venv Tools\Desinstalar.lnk" "$INSTDIR\Uninstall.exe"

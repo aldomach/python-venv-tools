@@ -8,7 +8,7 @@ import venv_manager as core
 
 class App(tk.Tk):
     def __init__(self):
-        super().__init__(); self.title('Python Venv Tools 1.2.1'); self.geometry('1050x780'); self.minsize(900,680)
+        super().__init__(); self.title('Python Venv Tools 1.2.2'); self.geometry('1050x780'); self.minsize(900,680)
         self.q=queue.Queue(); self.busy=False; self.records={}
         self.vars={k:tk.StringVar() for k in ('project','name','base','python','cache','entry','engine')}
         self.local=tk.BooleanVar(); self.no_cache=tk.BooleanVar()
@@ -74,84 +74,268 @@ class App(tk.Tk):
             return [str(Path(sys.executable).parent/'venv_cli.exe'),mode]
         return [sys.executable,'-I','-B',str(Path(core.__file__).resolve()),mode]
     def dependencies_window(self):
-        project=Path(self.vars['project'].get()).resolve(); req=project/'requirements.txt'
-        if not project.is_dir():return messagebox.showerror('Error','Selecciona un proyecto válido.')
-        if self.busy:return messagebox.showinfo('Ocupado','Hay una operación activa.')
-        win=tk.Toplevel(self); win.title('Dependencias — '+project.name); win.geometry('850x620'); win.transient(self); win.grab_set()
-        ttk.Label(win,text=str(req)).pack(anchor='w',padx=10,pady=5)
-        editor=tk.Text(win,undo=True,height=14,wrap='none'); editor.pack(fill='both',expand=True,padx=10)
-        original=req.read_bytes() if req.is_file() else None
-        if original is not None:
-            try:editor.insert('1.0',original.decode('utf-8-sig'))
-            except UnicodeError:win.destroy(); return messagebox.showerror('Error','requirements.txt no está en UTF-8.')
-        status=ttk.Label(win,text='Archivo existente' if original is not None else 'Archivo aún no creado'); status.pack(anchor='w',padx=10)
-        base_args=self.args(); busy=False
+        import re, tempfile, datetime
+        project=Path(self.vars['project'].get()).resolve()
+        req=project/'requirements.txt'
+        if not project.is_dir():
+            return messagebox.showerror('Error','Selecciona un proyecto válido.')
+        if self.busy:
+            return messagebox.showinfo('Ocupado','Hay una operación activa.')
+        def read():
+            return req.read_bytes() if req.exists() else None
+        def decode(data):
+            return data.decode('utf-8-sig').replace('\r\n','\n').replace('\r','\n') if data is not None else ''
+        try:
+            original=read()
+            initial=decode(original)
+        except (OSError,UnicodeError) as e:
+            return messagebox.showerror('No se pudo leer el archivo',str(e))
+        win=tk.Toplevel(self)
+        win.title('Dependencias — '+project.name)
+        win.geometry('930x690')
+        win.minsize(760,540)
+        win.transient(self)
+        win.grab_set()
+        ttk.Label(win,text=str(req),padding=8).pack(anchor='w')
+        tabs=ttk.Notebook(win)
+        tabs.pack(fill='both',expand=True,padx=10,pady=4)
+        filetab,scantab,envtab=[ttk.Frame(tabs,padding=8) for _ in range(3)]
+        tabs.add(filetab,text='1. Archivo requirements.txt')
+        tabs.add(scantab,text='2. Escanear código')
+        tabs.add(envtab,text='3. Paquetes del entorno')
+        ttk.Label(filetab,text='Editar y guardar el archivo no instala paquetes.').pack(anchor='w')
+        editor=tk.Text(filetab,undo=True,wrap='none')
+        editor.pack(fill='both',expand=True,pady=6)
+        editor.insert('1.0',initial)
+        editor.edit_modified(False)
+        filestatus=tk.StringVar()
+        status=tk.StringVar(value='Listo')
+        ttk.Label(filetab,textvariable=filestatus).pack(anchor='w')
+        ttk.Label(win,textvariable=status,padding=8).pack(anchor='w')
+        base_args=self.args()
+        busy=False
+        buttons=[]
+        def content():
+            return editor.get('1.0','end-1c')
+        def dirty():
+            return content()!=decode(original)
+        def file_state(event=None):
+            if editor.edit_modified():
+                editor.edit_modified(False)
+            filestatus.set('Cambios sin guardar' if dirty() else 'Archivo guardado' if original is not None else 'Archivo inexistente: pulsa Guardar para crearlo')
+        editor.bind('<<Modified>>',file_state)
+        file_state()
         def save():
             nonlocal original
+            if busy:return False
+            tmp=None
             try:
-                current=req.read_bytes() if req.is_file() else None
-                if current!=original and not messagebox.askyesno('Archivo modificado','Cambió fuera del editor. ¿Sobrescribir?',parent=win):return False
-                content=editor.get('1.0','end-1c'); req.write_text(content,encoding='utf-8'); original=req.read_bytes(); status.configure(text='Guardado'); return True
-            except OSError as e:messagebox.showerror('Error',str(e),parent=win); return False
+                current=read()
+                if current!=original:
+                    messagebox.showwarning('Archivo cambiado','El archivo cambió fuera de la aplicación. Recarga antes de guardar. No se escribió nada.',parent=win)
+                    return False
+                value=content()
+                if current is not None and not dirty():
+                    return True
+                if not value.strip() and not messagebox.askyesno('Archivo vacío','¿Guardar deliberadamente un requirements.txt vacío?',parent=win,default='no'):
+                    return False
+                if req.is_symlink():
+                    raise OSError('No se sobrescriben enlaces simbólicos.')
+                if current is not None:
+                    backup_dir=core.STATE/'requirements-backups'
+                    backup_dir.mkdir(parents=True,exist_ok=True)
+                    import hashlib
+                    key=hashlib.sha256(str(req).encode()).hexdigest()[:16]
+                    stamp=datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+                    backup=backup_dir/(key+'-'+stamp+'.txt')
+                    with backup.open('xb') as f:f.write(current)
+                with tempfile.NamedTemporaryFile(mode='wb',dir=project,prefix='.requirements-',delete=False) as f:
+                    tmp=Path(f.name)
+                    f.write(value.encode('utf-8'))
+                    f.flush()
+                    os.fsync(f.fileno())
+                if read()!=current:
+                    raise OSError('El archivo cambió durante el guardado. Recarga antes de continuar.')
+                os.replace(tmp,req)
+                original=read()
+                file_state()
+                status.set('Archivo guardado'+(' con respaldo en '+str(backup) if current is not None else ''))
+                return True
+            except OSError as e:
+                messagebox.showerror('No se pudo guardar',str(e),parent=win)
+                return False
+            finally:
+                if tmp is not None:
+                    try:tmp.unlink(missing_ok=True)
+                    except OSError:pass
         def external():
-            if not req.exists() and not save():return
-            try:os.startfile(str(req)) if core.WINDOWS else subprocess.Popen(['xdg-open',str(req)])
+            if not req.is_file():
+                return messagebox.showinfo('Archivo inexistente','Crea el archivo con Guardar antes de abrirlo.',parent=win)
+            try:
+                os.startfile(str(req)) if core.WINDOWS else subprocess.Popen(['xdg-open',str(req)])
+                status.set('Editor externo abierto. Usa Recargar para ver sus cambios.')
             except OSError as e:messagebox.showerror('Error',str(e),parent=win)
         def reload():
             nonlocal original
-            if messagebox.askyesno('Recargar','¿Descartar cambios del editor?',parent=win):
-                try:
-                    original=req.read_bytes() if req.is_file() else None; text=original.decode('utf-8-sig') if original else ''
-                    editor.delete('1.0','end');editor.insert('1.0',text)
-                except (OSError,UnicodeError) as e:messagebox.showerror('Error',str(e),parent=win)
-        results=tk.Text(win,height=8,wrap='word');results.pack(fill='both',expand=True,padx=10,pady=4)
+            if busy:return
+            if dirty() and not messagebox.askyesno('Recargar','¿Descartar los cambios sin guardar?',parent=win,default='no'):return
+            try:
+                data=read()
+                value=decode(data)
+                original=data
+                editor.delete('1.0','end')
+                editor.insert('1.0',value)
+                file_state()
+                status.set('Archivo recargado. No se modificó el disco.')
+            except (OSError,UnicodeError) as e:messagebox.showerror('Error',str(e),parent=win)
+        def bar(parent,actions):
+            row=ttk.Frame(parent)
+            row.pack(fill='x',pady=4)
+            for label,fn in actions:
+                b=ttk.Button(row,text=label,command=fn)
+                b.pack(side='left',padx=3)
+                buttons.append(b)
+        bar(filetab,[('Guardar archivo',save),('Abrir editor externo',external),('Recargar desde disco',reload)])
+        ttk.Label(scantab,text='Busca imports sin ejecutar el proyecto. Selecciona sugerencias para incorporarlas al editor; revisa las conjeturas.').pack(anchor='w',wraplength=850)
+        def table(parent,columns):
+            frame=ttk.Frame(parent)
+            frame.pack(fill='both',expand=True,pady=6)
+            tree=ttk.Treeview(frame,columns=[x[0] for x in columns],show='headings',selectmode='extended')
+            scroll=ttk.Scrollbar(frame,orient='vertical',command=tree.yview)
+            tree.configure(yscrollcommand=scroll.set)
+            scroll.pack(side='right',fill='y')
+            tree.pack(side='left',fill='both',expand=True)
+            for key,label,width in columns:
+                tree.heading(key,text=label)
+                tree.column(key,width=width)
+            return tree
+        scan_tree=table(scantab,[('package','Paquete sugerido',180),('module','Import',130),('source','Origen',140),('declared','En editor',130)])
+        scan_info=tk.StringVar(value='Todavía no se realizó el escaneo.')
+        ttk.Label(scantab,textvariable=scan_info,wraplength=850).pack(anchor='w')
+        scan_items={}
+        def canonical(name):
+            return re.sub(r'[-_.]+','-',name).lower()
+        def declared():
+            names=set()
+            for line in content().splitlines():
+                match=re.match(r'^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?=[\[<>=!~;@\s#]|$)',line)
+                if match:names.add(canonical(match.group(1)))
+            return names
+        def refresh_scan():
+            names=declared()
+            for iid,item in scan_items.items():
+                scan_tree.set(iid,'declared','Incluido' if canonical(item['package']) in names else 'No declarado')
+        def append():
+            names=declared()
+            new=[]
+            for iid in scan_tree.selection():
+                item=scan_items[iid]
+                key=canonical(item['package'])
+                if key not in names:
+                    new.append(item['package'])
+                    names.add(key)
+            if not new:
+                return messagebox.showinfo('Sin cambios','Los paquetes seleccionados ya están declarados o no hay selección.',parent=win)
+            editor.insert('end',('' if not content() or content().endswith('\n') else '\n')+'\n'.join(new)+'\n')
+            file_state()
+            refresh_scan()
+            tabs.select(filetab)
+            status.set('Sugerencias agregadas al editor. Revisa y guarda explícitamente.')
+        ttk.Label(envtab,text='Instalar agrega los paquetes faltantes. Actualizar busca versiones permitidas por requirements.txt. Ninguna acción escribe ese archivo.',wraplength=850).pack(anchor='w')
+        env_tree=table(envtab,[('req','Requerimiento',330),('version','Versión instalada',160),('state','Estado',180)])
+        additional=tk.StringVar(value='')
+        ttk.Label(envtab,textvariable=additional,wraplength=850).pack(anchor='w')
+        logs=tk.Text(envtab,height=7,wrap='word',state='disabled')
+        logs.pack(fill='x',pady=5)
+        def log(value):
+            logs.configure(state='normal')
+            logs.delete('1.0','end')
+            logs.insert('1.0',value)
+            logs.see('end')
+            logs.configure(state='disabled')
         def operation(flag,extra=None):
             nonlocal busy
             if busy:return
-            if flag in ('install','upgrade') and not save():return
-            busy=True; status.configure(text='Procesando...'); q=queue.Queue()
-            args=self.cli('requirements')+base_args+['--'+flag]+(['--json'] if flag in ('scan','compare') else [])+(extra or [])
+            if flag in ('install','upgrade','compare'):
+                try:
+                    current=read()
+                    if current is None:
+                        return messagebox.showinfo('Sin requirements.txt','Guarda primero el archivo o genera sugerencias mediante el escaneo.',parent=win)
+                    if dirty() or current!=original:
+                        return messagebox.showwarning('Cambios pendientes','Guarda o recarga el archivo antes de continuar. No se guardó nada automáticamente.',parent=win)
+                except OSError as e:
+                    return messagebox.showerror('Error',str(e),parent=win)
+            if flag in ('install','upgrade'):
+                action='instalar los requerimientos' if flag=='install' else 'actualizar los paquetes respetando los requerimientos'
+                if not messagebox.askyesno('Confirmar','¿Deseas '+action+' en el entorno seleccionado?\nNo se modificará requirements.txt.',parent=win,default='no'):return
+                if not content().strip():
+                    return messagebox.showinfo('Sin requerimientos','El archivo está vacío. No hay paquetes que procesar.',parent=win)
+            busy=True
+            status.set('Procesando…')
+            editor.configure(state='disabled')
+            for b in buttons:b.configure(state='disabled')
+            q=queue.Queue()
+            if flag=='check':
+                args=self.cli('requirements')+base_args+['--check-env']
+            else:
+                args=self.cli('requirements')+base_args+['--'+flag]+(['--json'] if flag in ('scan','compare') else [])+(extra or [])
             def worker():
                 try:
-                    p=subprocess.run(args,cwd=project,capture_output=True,text=True,encoding='utf-8',errors='replace');q.put((p.returncode,p.stdout,p.stderr))
+                    p=subprocess.run(args,cwd=project,capture_output=True,text=True,encoding='utf-8',errors='replace')
+                    q.put((p.returncode,p.stdout,p.stderr))
                 except Exception as e:q.put((1,'',str(e)))
             def poll():
                 nonlocal busy
                 try:rc,out,err=q.get_nowait()
                 except queue.Empty:win.after(100,poll);return
-                busy=False; status.configure(text='Finalizado (código '+str(rc)+')');results.delete('1.0','end');results.insert('1.0',out+err)
-                if rc==0 and flag=='scan':
-                    try:data=json.loads(out)
-                    except ValueError:return
-                    choose=tk.Toplevel(win);choose.title('Seleccionar sugerencias');choose.geometry('650x460');choose.transient(win);choose.grab_set()
-                    ttk.Label(choose,text='Revisa los nombres antes de instalar. Las conjeturas no están verificadas.').pack(pady=5)
-                    tree=ttk.Treeview(choose,columns=('module','source'),selectmode='extended');tree.heading('#0',text='Paquete');tree.heading('module',text='Import');tree.heading('source',text='Origen');tree.pack(fill='both',expand=True)
-                    items={}
-                    for item in data['dependencies']:
-                        i=tree.insert('','end',text=item['package'],values=(item['module'],item['source']));items[i]=item['package']
-                    def append():
-                        names=sorted(set(items[i] for i in tree.selection()))
-                        if names:editor.insert('end',('\n' if editor.get('1.0','end-1c') else '')+'\n'.join(names)+'\n')
-                        choose.destroy();win.grab_set()
-                    ttk.Button(choose,text='Agregar seleccionados al editor',command=append).pack(pady=5)
-                    choose.protocol('WM_DELETE_WINDOW',lambda:(choose.destroy(),win.grab_set()))
-                elif rc==0 and flag=='compare':
+                busy=False
+                editor.configure(state='normal')
+                for b in buttons:b.configure(state='normal')
+                status.set('Operación completada' if rc==0 else 'Error de operación (código '+str(rc)+')')
+                if rc!=0:
+                    log(out+err)
+                    messagebox.showerror('Error de operación',(err or out or 'Error desconocido')[-2500:],parent=win)
+                    return
+                if flag in ('scan','compare'):
                     try:
-                        data=json.loads(out);results.delete('1.0','end');results.insert('1.0','\n'.join(' | '.join(r) for r in data['requirements'])+'\nOtros paquetes (pueden ser indirectos): '+', '.join(data['additional']))
-                    except ValueError:pass
-            threading.Thread(target=worker,daemon=True).start();win.after(100,poll)
+                        data=json.loads(out.lstrip('\ufeff').strip())
+                        if flag=='scan':
+                            scan_tree.delete(*scan_tree.get_children())
+                            scan_items.clear()
+                            sources={'installed':'Instalado','alias':'Alias conocido','guess':'Por verificar'}
+                            for item in data['dependencies']:
+                                iid=scan_tree.insert('','end',values=(item['package'],item['module'],sources.get(item['source'],item['source']),''))
+                                scan_items[iid]=item
+                            refresh_scan()
+                            missing=sum(canonical(x['package']) not in declared() for x in scan_items.values())
+                            scan_info.set(f"{data['files']} archivos analizados · {len(scan_items)} sugerencias · {missing} no declaradas · {len(data['warnings'])} avisos")
+                            if data['warnings']:log('\n'.join(data['warnings']))
+                        else:
+                            env_tree.delete(*env_tree.get_children())
+                            for line,version,state in data['requirements']:
+                                env_tree.insert('','end',values=(line,version or '—',state))
+                            additional.set('Otros paquetes (pueden ser dependencias indirectas): '+', '.join(data['additional']))
+                    except (ValueError,KeyError,TypeError) as e:
+                        log(out+err)
+                        messagebox.showerror('Respuesta inválida','No se pudo interpretar el resultado. Consulta el registro de Entorno.\n'+str(e),parent=win)
+                else:
+                    log(out+err)
+                    if flag in ('install','upgrade'):status.set('Paquetes procesados. Usa Comparar para comprobar versiones.')
+            threading.Thread(target=worker,daemon=True).start()
+            win.after(100,poll)
         def freeze():
-            target=filedialog.asksaveasfilename(parent=win,initialdir=project,initialfile='requirements-lock.txt')
+            target=filedialog.asksaveasfilename(parent=win,initialdir=project,initialfile='requirements-lock.txt',defaultextension='.txt')
             if target:
-                if Path(target).exists():return messagebox.showerror('Error','Elige un archivo nuevo.',parent=win)
+                p=Path(target)
+                if p.resolve()==req.resolve() or p.exists():
+                    return messagebox.showerror('Error','Elige un archivo nuevo distinto de requirements.txt.',parent=win)
                 operation('freeze',['--output',target])
-        for actions in [[('Guardar / crear',save),('Abrir externamente',external),('Recargar',reload),('Escanear',lambda:operation('scan'))],[('Instalar',lambda:operation('install')),('Actualizar',lambda:operation('upgrade')),('Comparar archivo guardado',lambda:operation('compare')),('Exportar lock',freeze)]]:
-            bar=ttk.Frame(win);bar.pack(fill='x',padx=10,pady=3)
-            for label,fn in actions:ttk.Button(bar,text=label,command=fn).pack(side='left',padx=3)
+        bar(scantab,[('Escanear proyecto',lambda:operation('scan')),('Agregar seleccionados al editor',append)])
+        bar(envtab,[('Comparar versiones',lambda:operation('compare')),('Instalar requerimientos',lambda:operation('install')),('Actualizar paquetes',lambda:operation('upgrade'))])
+        bar(envtab,[('Verificar entorno',lambda:operation('check')),('Exportar versiones exactas',freeze)])
         def close():
-            if busy:return messagebox.showinfo('Ocupado','Espera a que termine la operación.',parent=win)
-            text=editor.get('1.0','end-1c'); old=original.decode('utf-8-sig') if original else ''
-            if text!=old and not messagebox.askyesno('Cerrar','¿Descartar cambios sin guardar?',parent=win):return
+            if busy:return messagebox.showinfo('Ocupado','Hay una operación activa.',parent=win)
+            if dirty() and not messagebox.askyesno('Cerrar','¿Descartar los cambios sin guardar?',parent=win,default='no'):return
             win.destroy()
         win.protocol('WM_DELETE_WINDOW',close)
     def env_path(self):
@@ -175,7 +359,12 @@ class App(tk.Tk):
         self.pip([action]+(['--upgrade'] if upgrade else [])+(['-y'] if action=='uninstall' else ['--no-compile'])+['--',p])
     def freeze(self):
         target=filedialog.asksaveasfilename(initialdir=self.vars['project'].get(),initialfile='requirements-lock.txt',defaultextension='.txt')
-        if target:self.pip(['freeze'],target)
+        if target:
+            p=Path(target)
+            req=Path(self.vars['project'].get())/'requirements.txt'
+            if p.resolve()==req.resolve() or p.exists():
+                return messagebox.showerror('Error','Elige un archivo nuevo distinto de requirements.txt.')
+            self.pip(['freeze'],target)
     def open_env(self):
         try:
             p=self.env_path(); os.startfile(str(p)) if core.WINDOWS else subprocess.Popen(['xdg-open',str(p)])
@@ -191,7 +380,9 @@ class App(tk.Tk):
                 p=subprocess.Popen(args,cwd=cwd,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE if save else subprocess.STDOUT,text=True,errors='replace')
                 if save:
                     out,err=p.communicate(); self.q.put(err)
-                    if p.returncode==0:Path(save).write_text(out,encoding='utf-8'); self.q.put('Guardado: '+save+'\n')
+                    if p.returncode==0:
+                        with Path(save).open('x',encoding='utf-8') as f:f.write(out)
+                        self.q.put('Guardado: '+save+'\n')
                 else:
                     for line in p.stdout:self.q.put(line)
                     p.wait()

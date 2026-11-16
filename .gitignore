@@ -1,0 +1,25 @@
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.venv-build/
+venv-build/
+# Build outputs
+build/
+dist/
+release/
+*.exe
+*.dll
+*.pyd
+*.zip
+# Local configuration and logs
+.env
+.env.*
+*.log
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store

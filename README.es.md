@@ -1,4 +1,4 @@
-# Python Venv Tools 1.2.1
+# Python Venv Tools 1.2.2
 
 Administrador centralizado de entornos virtuales Python para Windows y Linux. Interfaz gráfica Tkinter y comandos de consola. No requiere paquetes de terceros para funcionar.
 
@@ -8,7 +8,7 @@ La distribución compilada incorpora el runtime del gestor. Para crear entornos 
 
 1. Descomprimir el código fuente en una carpeta de Windows.
 2. Ejecutar `build_all.bat` (compila PyInstaller y NSIS).
-3. Se generan `release\PythonVenvTools-1.2.1-Setup.exe` y `release\PythonVenvTools-1.2.1-Portable.zip`.
+3. Se generan `release\PythonVenvTools-1.2.2-Setup.exe` y `release\PythonVenvTools-1.2.2-Portable.zip`.
 4. Instalar el EXE; por defecto usa `C:\Programs\venv-tools`, PATH del sistema y menú Inicio. Requiere UAC.
 5. Abrir una consola nueva y ejecutar `venv_gui`.
 
@@ -135,3 +135,9 @@ Documentación: [proyecto maestro](docs/PROJECT_MASTER.md), [arquitectura](docs/
 ---
 
 Autor: Aldo Machado.
+
+### Dependencias (1.2.2)
+
+- **Archivo requirements.txt**: edita y guarda explícitamente. Antes de reemplazarlo se conserva una copia en `requirements-backups` dentro de la configuración local. Se solicita confirmación para guardar un archivo vacío.
+- **Escanear código**: muestra paquetes sugeridos; agregar seleccionados solo modifica el editor y evita duplicados.
+- **Paquetes del entorno**: compara versiones, instala o actualiza desde el archivo guardado y verifica con pip check. Ninguna de estas operaciones guarda el editor. Exportar versiones exactas exige un archivo nuevo.

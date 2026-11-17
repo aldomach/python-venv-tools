@@ -49,7 +49,9 @@ def plan(d,choices):
     # Include legacy records not in the active index.
     for f in s.LEGACY_STATE.glob('*.json'):
         if f.name=='storage.json':continue
-        old=s.validate(s.read(f))
+        old=s.read(f)
+        if not isinstance(old,dict) or not isinstance(old.get('project'),str) or not Path(old['project']).is_absolute():
+            raise ValueError('No se puede verificar la ruta protegida en '+str(f))
         sources.add(old['project'])
     conf=safe(s.config_path(d),sources)
     stored=s.validate(s.read(conf))
@@ -85,7 +87,15 @@ def plan(d,choices):
             # Prevent fallback to obsolete settings from the old version.
             old=safe(s.LEGACY_STATE/(s.legacy_id(stored['project'])+'.json'),sources)
             if old.exists():
-                previous=s.validate(s.read(old))
+                previous=s.read(old)
+                if not isinstance(previous,dict) or not isinstance(previous.get('project'),str) or not Path(previous['project']).is_absolute():
+                    raise ValueError('Registro anterior inválido: '+str(old))
+                # Older records predate engine and other optional settings.
+                previous=dict(previous)
+                previous.setdefault('engine','pip')
+                previous.setdefault('no_cache',False)
+                previous.setdefault('cache_base',str(s.LEGACY_BASE/'pycache'))
+                previous=s.validate(previous)
                 if s.key(previous['project'])==s.key(stored['project']) and s.key(s.env_path(previous))==s.key(s.env_path(stored)):
                     paths.append(('file',old))
     for kind,p in paths:

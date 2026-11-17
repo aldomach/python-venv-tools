@@ -171,8 +171,18 @@ def migrate_legacy(base=None):
         try:
             v=env_path(d); marker=v/'.project-owner.json'
             if not marker.is_file() or key(read(marker)['project'])!=key(d['project']):raise ValueError('Owner marker missing or mismatched')
-            if config_path(d).exists():continue
-            save(dict(d,custom_cache=False,cache_base=str(folder(d)/'pycache')))
+            f=config_path(d)
+            if f.exists():
+                existing=validate(read(f))
+                if key(existing['project'])!=key(d['project']):raise ValueError('Existing configuration belongs to another project')
+                if key(env_path(existing))!=key(v):raise ValueError('Existing configuration points to another environment')
+                idx=index_path(existing['project'])
+                if idx.exists():
+                    if Path(read(idx)['config']).resolve()!=f.resolve():raise ValueError('Project already indexed elsewhere')
+                    continue
+                write(idx,{'config':str(f.resolve())})
+            else:
+                save(dict(d,custom_cache=False,cache_base=str(folder(d)/'pycache')))
             count+=1
         except (OSError,ValueError,KeyError,TypeError) as e:errors.append(str(d.get('project'))+': '+str(e))
     return count,errors

@@ -18,6 +18,7 @@ class Window(QMainWindow):
         self.resize(1240,760)
         self.preferences=QSettings('Venv Tool','Preview 1.3')
         self.records=[];self.callback=None
+        self.running_projects={}
         self.runner=Runner(self);self.runner.output.connect(self.output);self.runner.done.connect(self.completed)
         central=QWidget();self.setCentralWidget(central);layout=QVBoxLayout(central)
         self.vertical=QSplitter(Qt.Orientation.Vertical);layout.addWidget(self.vertical)
@@ -175,6 +176,7 @@ class Window(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(p)))
     def open_env(self):self.open_path(storage.env_path(self.data()))
     def clear_cache(self):
+        if self.running_projects:raise ValueError('Cierra los proyectos iniciados desde Venv Tool antes de limpiar la caché.')
         d=self.data()
         if self.confirm('¿Eliminar únicamente el bytecode administrado de este proyecto?'):storage.clear_cache(d)
     def project_menu(self,pos):
@@ -186,6 +188,7 @@ class Window(QMainWindow):
         action.triggered.connect(lambda:self.guard(self.remove_project))
         menu.exec(self.table.viewport().mapToGlobal(pos))
     def remove_project(self):
+        if self.running_projects:raise ValueError('Cierra los proyectos iniciados desde Venv Tool antes de eliminar recursos.')
         row=self.table.currentRow()
         if row<0 or row>=len(self.records) or not self.table.selectedItems():
             raise ValueError('Selecciona un proyecto de la lista')
@@ -238,12 +241,31 @@ class Window(QMainWindow):
         d=self.data();extra=list(extra)
         if not Path(d['project']).is_dir():raise ValueError('El código fuente no existe')
         if mode=='setup':
+            if self.running_projects:raise ValueError('Cierra los proyectos iniciados desde Venv Tool antes de crear o modificar entornos.')
             if not self.install.isChecked():extra+=['--no-requirements']
             if not self.upgrade.isChecked():extra+=['--no-upgrade-pip']
         if mode in ('run','launcher'):extra+=['--entry',d['entry'] or 'main.py']
-        self.launch(environment.command(mode,d,extra),d['project'])
+        args=environment.command(mode,d,extra)
+        if mode=='run':self.launch_project(args,d)
+        else:self.launch(args,d['project'])
+    def launch_project(self,args,d):
+        project=storage.key(d['project'])
+        if project in self.running_projects:raise ValueError('Este proyecto ya se está ejecutando desde Venv Tool.')
+        runner=Runner(self)
+        self.running_projects[project]=runner
+        runner.output.connect(self.output)
+        runner.done.connect(lambda code,out:self.project_finished(project,d['name'],code))
+        self.output('\n> Ejecutar '+d['name']+'\n'+str(args)+'\n')
+        self.statusBar().showMessage('Ejecutando '+d['name']+' — puedes seguir usando Venv Tool')
+        runner.start(args,d['project'])
+    def project_finished(self,project,name,code):
+        runner=self.running_projects.pop(project,None)
+        if runner is not None:runner.deleteLater()
+        self.output('\n'+name+' finalizó (código '+str(code)+').\n')
+        if not self.runner.active:self.statusBar().showMessage(name+' finalizó' if code==0 else name+' — error: '+str(code))
     def launch(self,args,cwd,callback=None):
         if self.runner.active:return
+        if self.running_projects:raise ValueError('Cierra los proyectos iniciados desde Venv Tool antes de ejecutar operaciones de mantenimiento.')
         self.callback=callback
         self.log.clear();self.output('> '+str(args)+'\n')
         self.tabs.setEnabled(False);self.statusBar().showMessage('Procesando...')
@@ -257,6 +279,8 @@ class Window(QMainWindow):
     def output(self,text):
         self.log.moveCursor(QTextCursor.MoveOperation.End);self.log.insertPlainText(text)
     def closeEvent(self,event):
+        if self.running_projects:
+            self.error('Cierra primero los proyectos iniciados desde Venv Tool.');event.ignore();return
         if self.runner.active or (self.dependencies.dirty() and not self.confirm('¿Descartar cambios sin guardar?')):event.ignore()
         else:
             self.preferences.setValue('geometry',self.saveGeometry())

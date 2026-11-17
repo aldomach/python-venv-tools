@@ -4,8 +4,9 @@ import sys
 from pathlib import Path
 from PySide6.QtCore import Qt,QUrl,QSettings
 from PySide6.QtGui import QDesktopServices,QTextCursor
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QLineEdit,QCheckBox,QComboBox,QPushButton,QLabel,QTableWidget,QTableWidgetItem,QAbstractItemView,QTabWidget,QPlainTextEdit,QFileDialog,QMessageBox,QSplitter,QHeaderView,QGridLayout,QGroupBox,QScrollArea)
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QLineEdit,QCheckBox,QComboBox,QPushButton,QLabel,QTableWidget,QTableWidgetItem,QAbstractItemView,QTabWidget,QPlainTextEdit,QFileDialog,QMessageBox,QSplitter,QHeaderView,QGridLayout,QGroupBox,QScrollArea,QDialog,QDialogButtonBox,QMenu)
 import pvt_storage as storage
+import pvt_removal as removal
 import pvt_environment as environment
 from pvt_qt_workers import Runner
 from pvt_qt_dependencies import DependenciesPage
@@ -41,6 +42,9 @@ class Window(QMainWindow):
         self.table.itemSelectionChanged.connect(self.select)
         self.bar(box,[('Nuevo / abrir',self.browse),('Detectar',self.refresh)])
         self.bar(box,[('Migrar anteriores',self.migrate),('Reasociar código',self.reassociate)])
+        self.bar(box,[('Eliminar recursos…',self.remove_project)])
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self.project_menu)
         scroll=QScrollArea();scroll.setWidgetResizable(True);self.horizontal.addWidget(scroll)
         right=QWidget();scroll.setWidget(right);box=QVBoxLayout(right);box.setContentsMargins(8,4,8,4);box.setSpacing(6)
         group=QGroupBox('Configuración del proyecto');box.addWidget(group)
@@ -173,6 +177,59 @@ class Window(QMainWindow):
     def clear_cache(self):
         d=self.data()
         if self.confirm('¿Eliminar únicamente el bytecode administrado de este proyecto?'):storage.clear_cache(d)
+    def project_menu(self,pos):
+        item=self.table.itemAt(pos)
+        if item is None or self.runner.active:return
+        self.table.selectRow(item.row())
+        menu=QMenu(self)
+        action=menu.addAction('Eliminar recursos…')
+        action.triggered.connect(lambda:self.guard(self.remove_project))
+        menu.exec(self.table.viewport().mapToGlobal(pos))
+    def remove_project(self):
+        row=self.table.currentRow()
+        if row<0 or row>=len(self.records) or not self.table.selectedItems():
+            raise ValueError('Selecciona un proyecto de la lista')
+        d=dict(self.records[row])
+        if self.dependencies.dirty():
+            raise ValueError('Guarda o descarta los cambios pendientes antes de eliminar recursos')
+        dialog=QDialog(self);dialog.setWindowTitle('Eliminar recursos — '+d['name']);dialog.resize(660,420)
+        layout=QVBoxLayout(dialog)
+        label=QLabel('Código fuente protegido (no se elimina nada de esta carpeta):\n'+d['project']);label.setWordWrap(True);layout.addWidget(label)
+        layout.addWidget(QLabel('Selecciona únicamente los recursos que deseas eliminar.'))
+        checks={}
+        for k,title in removal.LABELS.items():
+            c=QCheckBox(title);layout.addWidget(c);checks[k]=c
+            if k=='venv' and d['local']:
+                c.setEnabled(False);c.setToolTip('Los entornos dentro del código fuente están protegidos')
+            if k=='pycache' and d.get('custom_cache'):
+                c.setEnabled(False);c.setToolTip('Las rutas personalizadas están protegidas')
+        preview=QPlainTextEdit();preview.setReadOnly(True);layout.addWidget(preview)
+        buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel)
+        ok=buttons.button(QDialogButtonBox.StandardButton.Ok);ok.setText('Eliminar seleccionados')
+        layout.addWidget(buttons);buttons.rejected.connect(dialog.reject)
+        def choices():return [k for k,c in checks.items() if c.isChecked()]
+        def update():
+            ok.setEnabled(False)
+            if not choices():preview.setPlainText('No hay recursos seleccionados.');return
+            try:
+                paths=removal.plan(d,choices())
+                preview.setPlainText('\n'.join(str(p) for _,p in paths) or 'No existen los recursos seleccionados.')
+                ok.setEnabled(bool(paths))
+            except (OSError,ValueError,KeyError,TypeError) as e:preview.setPlainText(str(e))
+        def execute():
+            try:
+                paths=removal.plan(d,choices())
+                if not paths:return
+                if not self.confirm('Cierra cualquier proceso que esté utilizando este entorno.\n¿Eliminar definitivamente los recursos listados?\nEl código fuente no se toca.'):return
+                removed=removal.remove(d,choices(),paths)
+                dialog.accept()
+                self.refresh()
+                self.output('\nRecursos eliminados:\n'+'\n'.join(removed)+'\n')
+                self.statusBar().showMessage('Recursos eliminados')
+            except (OSError,ValueError,KeyError,RuntimeError,TypeError) as e:
+                self.error(e);update();self.refresh()
+        for c in checks.values():c.toggled.connect(update)
+        buttons.accepted.connect(execute);update();dialog.exec()
     def change_root(self):
         p=QFileDialog.getExistingDirectory(self,'Directorio de datos',str(storage.root()))
         if p and self.confirm('Cambiar ubicación activa sin mover los entornos existentes.'):

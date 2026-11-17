@@ -13,9 +13,9 @@ from pvt_qt_dependencies import DependenciesPage
 class Window(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Python Venv Tools 1.3.0-alpha.1')
+        self.setWindowTitle('Venv Tool 1.3.0-alpha.1')
         self.resize(1240,760)
-        self.preferences=QSettings('Python Venv Tools','Preview 1.3')
+        self.preferences=QSettings('Venv Tool','Preview 1.3')
         self.records=[];self.callback=None
         self.runner=Runner(self);self.runner.output.connect(self.output);self.runner.done.connect(self.completed)
         central=QWidget();self.setCentralWidget(central);layout=QVBoxLayout(central)
@@ -93,7 +93,7 @@ class Window(QMainWindow):
         if self.runner.active:return
         try:fn()
         except (OSError,ValueError,KeyError,RuntimeError) as e:self.error(e)
-    def error(self,e):QMessageBox.warning(self,'Python Venv Tools',str(e))
+    def error(self,e):QMessageBox.warning(self,'Venv Tool',str(e))
     def confirm(self,msg):
         return QMessageBox.question(self,'Confirmar',msg,QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,QMessageBox.StandardButton.No)==QMessageBox.StandardButton.Yes
     def defaults(self,p,d=None):

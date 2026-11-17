@@ -1,6 +1,6 @@
 @echo off
-if exist "%~dp0VenvTools.exe" (
- start "" "%~dp0VenvTools.exe"
+if exist "%~dp0VenvTool.exe" (
+ start "" "%~dp0VenvTool.exe"
  exit /b
 )
 where py.exe >nul 2>&1

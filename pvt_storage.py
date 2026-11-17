@@ -53,7 +53,7 @@ def config_path(d):
     return folder(d)/'config'/'config.json'
 
 def cache_path(d):
-    return Path(d['cache_base']) if d.get('custom_cache') else folder(d)/'pycache'
+    return Path(d['cache_base'])/d['name']/legacy_id(d['project']) if d.get('custom_cache') else folder(d)/'pycache'
 
 def interpreter_path(d):
     return env_path(d)/('Scripts/python.exe' if WINDOWS else 'bin/python')
@@ -85,10 +85,15 @@ def load(project):
     if old.is_file():
         d=validate(read(old))
         if key(d['project'])==project:return d
+    f=root()/'projects'/Path(project).name/'config'/'config.json'
+    if f.is_file():
+        d=validate(read(f))
+        if key(d['project'])==project:return d
     return {}
 
 def save(d):
     d=dict(validate(d))
+    d['project']=key(d['project'])
     p=config_path(d)
     if p.exists():
         old=read(p)
@@ -117,6 +122,7 @@ def discover(base=None):
             uuid.UUID(d['id'])
             # A copied directory may be relocated; internal paths follow its actual location.
             d=dict(d,base=str(base.resolve()),name=p.name)
+            if not d.get('custom_cache'):d['cache_base']=str(p/'pycache')
             records.append(d)
         except (ValueError,KeyError,TypeError,OSError) as e:warnings.append(str(f)+': '+str(e))
     return records,warnings
@@ -166,7 +172,7 @@ def migrate_legacy(base=None):
             v=env_path(d); marker=v/'.project-owner.json'
             if not marker.is_file() or key(read(marker)['project'])!=key(d['project']):raise ValueError('Owner marker missing or mismatched')
             if config_path(d).exists():continue
-            save(dict(d,custom_cache=False))
+            save(dict(d,custom_cache=False,cache_base=str(folder(d)/'pycache')))
             count+=1
         except (OSError,ValueError,KeyError,TypeError) as e:errors.append(str(d.get('project'))+': '+str(e))
     return count,errors
@@ -187,9 +193,9 @@ def safe_managed(d,part):
     p=folder(d)/part
     source=Path(d['project']).resolve()
     resolved=p.resolve()
-    if p.is_symlink() or resolved==source or resolved in source.parents or source in resolved.parents:
+    if p.is_symlink() or folder(d).is_symlink() or resolved.parent!=folder(d).absolute() or resolved==source or resolved in source.parents or source in resolved.parents:
         raise ValueError('Unsafe path; no data removed')
-    if not config_path(d).is_file() or read(config_path(d)).get('id')!=d.get('id'):raise ValueError('Project ownership not verified')
+    if d.get('id') is None or not config_path(d).is_file() or read(config_path(d)).get('id')!=d.get('id'):raise ValueError('Project ownership not verified')
     return p
 
 def clear_cache(d):
@@ -224,4 +230,5 @@ def reassociate(d,new):
         raise
     old_index=index_path(old['project'])
     if old_index.exists():old_index.unlink()
+    # Keep the previous legacy record untouched; it is not an active index.
     return updated

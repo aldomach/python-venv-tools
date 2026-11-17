@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-if not exist "dist\VenvTools\VenvTools.exe" (
+if not exist "dist\VenvTool\VenvTool.exe" (
  echo Ejecuta build_exe.bat primero.
  exit /b 1
 )

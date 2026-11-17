@@ -13,6 +13,7 @@ import sys
 if not getattr(sys, "frozen", False):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dependencies
+import pvt_storage as storage
 
 WINDOWS = os.name == 'nt'
 PROJECT = Path.cwd().resolve()
@@ -24,7 +25,7 @@ def xdg(var, default):
 
 LOCALAPP = Path(os.environ.get('LOCALAPPDATA', str(HOME / 'AppData' / 'Local')))
 STATE = (LOCALAPP if WINDOWS else xdg('XDG_CONFIG_HOME', HOME / '.config')) / 'python-venv-tools'
-BASE = Path(r'C:\venvs') if WINDOWS else xdg('XDG_DATA_HOME', HOME / '.local/share') / 'venvs'
+BASE = storage.root() / 'projects'
 CACHE = BASE / 'pycache' if WINDOWS else xdg('XDG_CACHE_HOME', HOME / '.cache') / 'python'
 KEY = os.path.normcase(str(PROJECT))
 ID = hashlib.sha256(KEY.encode('utf-8')).hexdigest()[:24]
@@ -40,12 +41,7 @@ def absolute(value):
 
 
 def load():
-    if not CONFIG.exists():
-        return {}
-    data = json.loads(CONFIG.read_text(encoding='utf-8'))
-    if not isinstance(data, dict) or data.get('project') != KEY:
-        fail('Configuracion invalida: ' + str(CONFIG))
-    return data
+    return storage.load(PROJECT)
 
 
 def write_json(path, data):
@@ -91,11 +87,12 @@ def options(mode, argv):
 
 
 def settings(a, old):
-    d = dict(project=KEY, name=PROJECT.name, base=str(BASE), local=False, python=None, cache_base=str(CACHE), no_cache=False, engine="pip")
+    d = dict(project=KEY, name=PROJECT.name, base=str(BASE), local=False, python=None, cache_base=str(CACHE), no_cache=False, engine="pip", custom_cache=False)
     d.update(old)
     for k, v in [('name', a.name), ('base', a.path), ('local', a.local), ('python', a.python), ('cache_base', a.cache_path), ('no_cache', a.no_cache), ('engine', a.engine)]:
         if v is not None:
             d[k] = v
+    if a.cache_path is not None:d['custom_cache']=True
     name = d['name']
     if not name or name in ('.', '..') or re.search(r'[<>:"/\\|?*\x00-\x1f]', name) or name.endswith(('.', ' ')):
         fail('Nombre de proyecto no valido: ' + repr(name))
@@ -103,6 +100,7 @@ def settings(a, old):
         fail('Nombre de proyecto reservado: ' + name)
     d['base'] = str(absolute(d['base']))
     d['cache_base'] = str(absolute(d['cache_base']))
+    if not d.get('custom_cache'):d['cache_base']=str(storage.folder(d)/'pycache')
     return d
 
 
@@ -250,6 +248,8 @@ def requirements(a,d,venv,python,env,marker):
 
 
 def main():
+    if sys.argv[1:]==['--version']:
+        print('Python Venv Tools 1.3.0-alpha.1'); return 0
     if len(sys.argv)<2 or sys.argv[1] not in ("setup","run","launcher","requirements"):
         print("Uso: venv_cli {setup|run|launcher|requirements} --help")
         return 0 if len(sys.argv)<2 or sys.argv[1]=="--help" else 2
@@ -265,17 +265,21 @@ def main():
     d = settings(a, load())
     venv = PROJECT / ('venv' if WINDOWS else '.venv') if d['local'] else Path(d['base']) / d['name'] / 'venv'
     venv = venv.resolve()
-    cache = Path(d['cache_base']) / d['name'] / ID / ('py' + d['python'] if d['python'] and re.fullmatch(r'\d+(?:\.\d+){0,2}', d['python']) else 'default')
+    cache = storage.cache_path(d)
     python = venv / ('Scripts/python.exe' if WINDOWS else 'bin/python')
     marker = venv / '.project-owner.json'
     env = environment(d, cache)
+    env['PIP_CACHE_DIR']=str(storage.root()/'cache'/'pip')
+    env['UV_CACHE_DIR']=str(storage.root()/'cache'/'uv')
+    conf=storage.config_path(d)
+    if conf.is_file() and storage.read(conf).get('project')!=KEY:fail('La carpeta administrada pertenece a otro proyecto.')
     if marker.exists():
         if json.loads(marker.read_text(encoding='utf-8')).get('project') != KEY:
             fail('El entorno pertenece a otro proyecto. Usa --name o --path distintos.')
     elif venv.exists() and not d['local']:
         fail('Entorno externo existente sin identificador de propietario. Usa otro --name o --path, o mueve el entorno anterior manualmente.')
     if a.verbose or mode == 'setup':
-        print('Proyecto:', PROJECT, '\nEntorno:', venv, '\nCache:', 'sin escritura' if d['no_cache'] else cache, '\nConfiguracion:', CONFIG, flush=True)
+        print('Proyecto:', PROJECT, '\nEntorno:', venv, '\nCache:', 'sin escritura' if d['no_cache'] else cache, '\nConfiguracion:', storage.config_path(d), flush=True)
     if mode == 'requirements':
         return requirements(a,d,venv,python,env,marker)
     if mode == 'setup':
@@ -317,7 +321,8 @@ def main():
         required(pip + ['check'], env)
         if not marker.exists():
             write_json(marker, {'project': KEY})
-        write_json(CONFIG, d)
+        d=storage.save(d)
+        storage.snapshot(d, captured(pip+['freeze'],env))
         print('Entorno configurado correctamente.')
         return 0
     if not python.is_file():

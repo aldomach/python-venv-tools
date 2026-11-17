@@ -2,10 +2,10 @@
 Unicode true
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
-Name "Python Venv Tools"
-OutFile "release\PythonVenvTools-1.2.2-Setup.exe"
-InstallDir "C:\Programs\venv-tools"
-InstallDirRegKey HKLM "Software\PythonVenvManager" "InstallDir"
+Name "Venv Tool"
+OutFile "release\VenvTool-1.3.0-Setup.exe"
+InstallDir "C:\venv-tool\app"
+InstallDirRegKey HKLM "Software\VenvTool" "InstallDir"
 RequestExecutionLevel admin
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_DIRECTORY
@@ -16,15 +16,15 @@ RequestExecutionLevel admin
 Section "Instalar"
  SetShellVarContext all
  SetOutPath "$INSTDIR"
- File /r "dist\VenvTools\*"
- WriteRegStr HKLM "Software\PythonVenvManager" "InstallDir" "$INSTDIR"
+ File /r "dist\VenvTool\*"
+ WriteRegStr HKLM "Software\VenvTool" "InstallDir" "$INSTDIR"
  WriteUninstaller "$INSTDIR\Uninstall.exe"
- WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "DisplayName" "Python Venv Tools"
- WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
- WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager" "DisplayVersion" "1.2.2"
- CreateDirectory "$SMPROGRAMS\Python Venv Tools"
- CreateShortcut "$SMPROGRAMS\Python Venv Tools\Python Venv Tools.lnk" "$INSTDIR\VenvTools.exe"
- CreateShortcut "$SMPROGRAMS\Python Venv Tools\Desinstalar.lnk" "$INSTDIR\Uninstall.exe"
+ WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VenvTool" "DisplayName" "Venv Tool"
+ WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VenvTool" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
+ WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VenvTool" "DisplayVersion" "1.3.0"
+ CreateDirectory "$SMPROGRAMS\Venv Tool"
+ CreateShortcut "$SMPROGRAMS\Venv Tool\Venv Tool.lnk" "$INSTDIR\VenvTool.exe"
+ CreateShortcut "$SMPROGRAMS\Venv Tool\Desinstalar.lnk" "$INSTDIR\Uninstall.exe"
  ExecWait 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\path_helper.ps1" -Action Add -Directory "$INSTDIR"' $0
  ${If} $0 != 0
  MessageBox MB_ICONEXCLAMATION "No se pudo actualizar PATH. Agregue manualmente $INSTDIR al PATH del sistema."
@@ -37,7 +37,7 @@ Section "Uninstall"
  ${If} $0 != 0
  MessageBox MB_ICONEXCLAMATION "No se pudo quitar la entrada de PATH. Puede quitarla manualmente."
  ${EndIf}
- Delete "$INSTDIR\VenvTools.exe"
+ Delete "$INSTDIR\VenvTool.exe"
  Delete "$INSTDIR\venv_cli.exe"
  Delete "$INSTDIR\venv_requirements.bat"
  RMDir /r "$INSTDIR\_internal"
@@ -53,10 +53,10 @@ Section "Uninstall"
  Delete "$INSTDIR\THIRD_PARTY_NOTICES.md"
  Delete "$INSTDIR\path_helper.ps1"
  Delete "$INSTDIR\Uninstall.exe"
- Delete "$SMPROGRAMS\Python Venv Tools\Python Venv Tools.lnk"
- Delete "$SMPROGRAMS\Python Venv Tools\Desinstalar.lnk"
- RMDir "$SMPROGRAMS\Python Venv Tools"
+ Delete "$SMPROGRAMS\Venv Tool\Venv Tool.lnk"
+ Delete "$SMPROGRAMS\Venv Tool\Desinstalar.lnk"
+ RMDir "$SMPROGRAMS\Venv Tool"
  RMDir "$INSTDIR"
- DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\PythonVenvManager"
- DeleteRegKey HKLM "Software\PythonVenvManager"
+ DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VenvTool"
+ DeleteRegKey HKLM "Software\VenvTool"
 SectionEnd

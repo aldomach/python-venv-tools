@@ -6,7 +6,7 @@ from pathlib import Path
 WINDOWS=os.name=='nt'
 HOME=Path.home()
 LEGACY_STATE=(Path(os.environ.get('LOCALAPPDATA',HOME/'AppData/Local')) if WINDOWS else Path(os.environ.get('XDG_CONFIG_HOME',HOME/'.config')))/'python-venv-tools'
-DEFAULT_ROOT=Path('C:/python-venv-tools') if WINDOWS else Path(os.environ.get('XDG_DATA_HOME',HOME/'.local/share'))/'python-venv-tools-data'
+DEFAULT_ROOT=Path('C:/venv-tool') if WINDOWS else Path(os.environ.get('XDG_DATA_HOME',HOME/'.local/share'))/'venv-tool'
 LEGACY_BASE=Path('C:/venvs') if WINDOWS else Path(os.environ.get('XDG_DATA_HOME',HOME/'.local/share'))/'venvs'
 
 def key(p):
@@ -26,7 +26,7 @@ def write(p,d):
         if tmp is not None and tmp.exists():tmp.unlink()
 
 def root():
-    override=os.environ.get('PYTHON_VENV_TOOLS_ROOT')
+    override=os.environ.get('VENV_TOOL_ROOT') or os.environ.get('PYTHON_VENV_TOOLS_ROOT')
     if override:return Path(override).expanduser().resolve()
     p=LEGACY_STATE/'storage.json'
     return Path(read(p)['root']).expanduser().resolve() if p.is_file() else DEFAULT_ROOT

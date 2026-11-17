@@ -249,7 +249,7 @@ def requirements(a,d,venv,python,env,marker):
 
 def main():
     if sys.argv[1:]==['--version']:
-        print('Python Venv Tools 1.3.0-alpha.1'); return 0
+        print('Venv Tool 1.3.0-alpha.1'); return 0
     if len(sys.argv)<2 or sys.argv[1] not in ("setup","run","launcher","requirements"):
         print("Uso: venv_cli {setup|run|launcher|requirements} --help")
         return 0 if len(sys.argv)<2 or sys.argv[1]=="--help" else 2

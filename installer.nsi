@@ -10,6 +10,9 @@ RequestExecutionLevel admin
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+!define MUI_FINISHPAGE_RUN "$INSTDIR\VenvTool.exe"
+!define MUI_FINISHPAGE_RUN_TEXT "Abrir Venv Tool"
+!insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "Spanish"
@@ -29,7 +32,6 @@ Section "Instalar"
  ${If} $0 != 0
  MessageBox MB_ICONEXCLAMATION "No se pudo actualizar PATH. Agregue manualmente $INSTDIR al PATH del sistema."
  ${EndIf}
- MessageBox MB_OK "El gestor incluye su propio runtime. Para crear entornos instala Python. Abra una terminal nueva para usar los comandos."
 SectionEnd
 Section "Uninstall"
  SetShellVarContext all

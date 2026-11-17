@@ -2,9 +2,9 @@
 # Autor: Aldo Machado
 import sys
 from pathlib import Path
-from PySide6.QtCore import Qt,QUrl
-from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QLineEdit,QCheckBox,QComboBox,QPushButton,QLabel,QTableWidget,QTableWidgetItem,QAbstractItemView,QTabWidget,QPlainTextEdit,QFileDialog,QMessageBox)
+from PySide6.QtCore import Qt,QUrl,QSettings
+from PySide6.QtGui import QDesktopServices,QTextCursor
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QLineEdit,QCheckBox,QComboBox,QPushButton,QLabel,QTableWidget,QTableWidgetItem,QAbstractItemView,QTabWidget,QPlainTextEdit,QFileDialog,QMessageBox,QSplitter,QHeaderView,QGridLayout,QGroupBox,QScrollArea)
 import pvt_storage as storage
 import pvt_environment as environment
 from pvt_qt_workers import Runner
@@ -14,33 +14,58 @@ class Window(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('Python Venv Tools 1.3.0-alpha.1')
-        self.resize(1100,780)
+        self.resize(1240,760)
+        self.preferences=QSettings('Python Venv Tools','Preview 1.3')
         self.records=[];self.callback=None
         self.runner=Runner(self);self.runner.output.connect(self.output);self.runner.done.connect(self.completed)
         central=QWidget();self.setCentralWidget(central);layout=QVBoxLayout(central)
-        self.tabs=QTabWidget();layout.addWidget(self.tabs)
-        projects=QWidget();box=QVBoxLayout(projects)
+        self.vertical=QSplitter(Qt.Orientation.Vertical);layout.addWidget(self.vertical)
+        layout.setContentsMargins(6,6,6,6)
+        self.tabs=QTabWidget();self.vertical.addWidget(self.tabs)
+        projects=QWidget();outer=QVBoxLayout(projects);outer.setContentsMargins(4,4,4,4)
+        self.horizontal=QSplitter(Qt.Orientation.Horizontal);outer.addWidget(self.horizontal)
+        left=QWidget();box=QVBoxLayout(left);box.setContentsMargins(2,2,4,2);box.setSpacing(5)
+        self.horizontal.addWidget(left)
         self.root_label=QLabel();box.addWidget(self.root_label)
         self.search=QLineEdit();self.search.setPlaceholderText('Filtrar proyectos');box.addWidget(self.search)
-        self.table=QTableWidget(0,4);self.table.setHorizontalHeaderLabels(['Proyecto','Código fuente','Entorno','Estado'])
+        self.table=QTableWidget(0,2);self.table.setHorizontalHeaderLabels(['Proyecto','Estado'])
+        self.table.verticalHeader().hide();self.table.verticalHeader().setDefaultSectionSize(24)
+        self.table.horizontalHeader().setSectionResizeMode(0,QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1,QHeaderView.ResizeMode.Stretch)
+        self.table.setWordWrap(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True);box.addWidget(self.table)
         self.search.textChanged.connect(self.filter)
         self.table.itemSelectionChanged.connect(self.select)
-        self.bar(box,[('Nuevo / abrir',self.browse),('Detectar proyectos',self.refresh),('Migrar anteriores',self.migrate),('Reasociar código',self.reassociate)])
-        form=QFormLayout();box.addLayout(form)
+        self.bar(box,[('Nuevo / abrir',self.browse),('Detectar',self.refresh)])
+        self.bar(box,[('Migrar anteriores',self.migrate),('Reasociar código',self.reassociate)])
+        scroll=QScrollArea();scroll.setWidgetResizable(True);self.horizontal.addWidget(scroll)
+        right=QWidget();scroll.setWidget(right);box=QVBoxLayout(right);box.setContentsMargins(8,4,8,4);box.setSpacing(6)
+        group=QGroupBox('Configuración del proyecto');box.addWidget(group)
+        form=QFormLayout(group);form.setContentsMargins(8,8,8,8);form.setVerticalSpacing(5)
         self.fields={}
         for k,label in [('project','Código fuente'),('name','Nombre'),('base','Base de entornos'),('python','Python (versión o ruta)'),('entry','Archivo de entrada'),('cache_base','Caché personalizada')]:
-            field=QLineEdit();self.fields[k]=field;form.addRow(label,field)
+            field=QLineEdit();self.fields[k]=field
+            if k in ('project','base','cache_base','entry','python'):
+                row=QHBoxLayout();row.setSpacing(3);row.addWidget(field)
+                choose=QPushButton('…');choose.setFixedWidth(28);choose.clicked.connect(lambda checked=False,k=k:self.guard(lambda:self.pick_field(k)));row.addWidget(choose);form.addRow(label,row)
+            else:form.addRow(label,field)
         self.local=QCheckBox('Entorno local');self.no_cache=QCheckBox('Desactivar bytecode');self.custom=QCheckBox('Usar caché personalizada')
         self.install=QCheckBox('Instalar requirements.txt');self.install.setChecked(True)
         self.upgrade=QCheckBox('Actualizar pip');self.upgrade.setChecked(True)
         self.engine=QComboBox();self.engine.addItems(['pip','uv'])
         form.addRow('Motor',self.engine)
-        for c in (self.local,self.no_cache,self.custom,self.install,self.upgrade):form.addRow(c)
-        self.bar(box,[('Crear / instalar',lambda:self.run('setup')),('Ejecutar',lambda:self.run('run')),('Verificar y ejecutar',lambda:self.run('run',['--check'])),('Generar lanzador',lambda:self.run('launcher')),('Abrir entorno',self.open_env)])
+        opts=QGridLayout();opts.setSpacing(5)
+        for i,c in enumerate((self.local,self.no_cache,self.custom,self.install,self.upgrade)):opts.addWidget(c,i//2,i%2)
+        form.addRow(opts)
+        self.custom.toggled.connect(self.fields['cache_base'].setEnabled)
+        self.bar(box,[('Crear / instalar',lambda:self.run('setup')),('Ejecutar',lambda:self.run('run'))])
+        self.bar(box,[('Verificar y ejecutar',lambda:self.run('run',['--check'])),('Generar lanzador',lambda:self.run('launcher'))])
+        self.bar(box,[('Abrir entorno',self.open_env),('Abrir código',lambda:self.open_path(self.data()['project']))])
+        box.addStretch()
+        self.horizontal.setStretchFactor(0,5);self.horizontal.setStretchFactor(1,5);self.horizontal.setSizes([620,600]);self.horizontal.setChildrenCollapsible(False)
         self.tabs.addTab(projects,'Proyectos')
         self.dependencies=DependenciesPage(self.launch);self.tabs.addTab(self.dependencies,'Dependencias')
         self.tabs.currentChanged.connect(self.tab_changed)
@@ -49,9 +74,16 @@ class Window(QMainWindow):
         self.bar(box,[('Verificar paquetes',lambda:self.run('requirements',['--check-env'])),('Abrir código',lambda:self.open_path(self.data()['project'])),('Abrir configuración',lambda:self.open_path(storage.config_path(self.data()).parent))])
         self.bar(box,[('Limpiar bytecode seleccionado',self.clear_cache),('Cambiar almacenamiento',self.change_root)])
         box.addStretch();self.tabs.addTab(manage,'Administración')
-        self.log=QPlainTextEdit();self.log.setReadOnly(True);self.log.setMaximumBlockCount(2000);self.log.setMaximumHeight(155);layout.addWidget(self.log)
+        self.log=QPlainTextEdit();self.log.setReadOnly(True);self.log.setMaximumBlockCount(2000);self.log.setMinimumHeight(0);self.vertical.addWidget(self.log)
+        self.vertical.setStretchFactor(0,5);self.vertical.setStretchFactor(1,1);self.vertical.setSizes([640,100]);self.vertical.setCollapsible(0,False)
+        for name,obj in [('geometry',self),('horizontal',self.horizontal),('vertical',self.vertical)]:
+            value=self.preferences.value(name)
+            if value is not None:
+                if name=='geometry':obj.restoreGeometry(value)
+                else:obj.restoreState(value)
         self.statusBar().showMessage('Listo');self.statusBar().addPermanentWidget(QLabel('Aldo'))
         self.defaults(Path.cwd());self.refresh()
+        self.fields['cache_base'].setEnabled(self.custom.isChecked())
     def bar(self,layout,items):
         row=QHBoxLayout()
         for label,fn in items:
@@ -69,6 +101,19 @@ class Window(QMainWindow):
         self.current=d
         for k,v in dict(project=str(p),name=d.get('name',p.name),base=d.get('base',str(storage.root()/'projects')),python=d.get('python') or '',entry=d.get('entry','main.py'),cache_base=d.get('cache_base','')).items():self.fields[k].setText(v)
         self.local.setChecked(d.get('local',False));self.no_cache.setChecked(d.get('no_cache',False));self.custom.setChecked(d.get('custom_cache',False));self.engine.setCurrentText(d.get('engine','pip'))
+    def pick_field(self,k):
+        field=self.fields[k]
+        if k in ('entry','python'):
+            path,_=QFileDialog.getOpenFileName(self,'Seleccionar archivo',self.fields['project'].text())
+            if path and k=='entry':
+                try:path=str(Path(path).relative_to(Path(self.fields['project'].text())))
+                except ValueError:pass
+        else:path=QFileDialog.getExistingDirectory(self,'Seleccionar carpeta',field.text() or str(Path.home()))
+        if path:
+            if k=='project':
+                d=storage.load(path)
+                if self.dependencies.select(d or None):self.defaults(path,d)
+            else:field.setText(path)
     def data(self):
         d={k:w.text().strip() for k,w in self.fields.items()}
         if not d['project'] or not d['base']:raise ValueError('Selecciona un proyecto y una base')
@@ -86,11 +131,16 @@ class Window(QMainWindow):
             self.records=storage.registered()
             for w in warnings:self.output(w+'\n')
         except (OSError,ValueError,KeyError) as e:self.error(e);return
+        selected=self.fields['project'].text()
         self.table.blockSignals(True);self.table.setRowCount(0)
+        selected_row=-1
         for d in self.records:
             row=self.table.rowCount();self.table.insertRow(row)
-            for col,value in enumerate([d['name'],d['project'],str(storage.env_path(d)),environment.state(d)]):self.table.setItem(row,col,QTableWidgetItem(value))
-        self.table.blockSignals(False);self.table.resizeColumnsToContents();self.filter()
+            for col,value in enumerate([d['name'],environment.state(d)]):
+                item=QTableWidgetItem(value);item.setToolTip(d['project']+'\n'+str(storage.env_path(d)));self.table.setItem(row,col,item)
+            if storage.key(d['project'])==storage.key(selected):selected_row=row
+        if selected_row>=0:self.table.selectRow(selected_row)
+        self.table.blockSignals(False);self.filter()
     def filter(self):
         term=self.search.text().casefold()
         for row,d in enumerate(self.records):self.table.setRowHidden(row,term not in (d['name']+' '+d['project']).casefold())
@@ -148,10 +198,14 @@ class Window(QMainWindow):
         elif code==0:self.refresh()
         if code:self.error('Operación fallida. Consulta el registro.')
     def output(self,text):
-        self.log.moveCursor(self.log.textCursor().MoveOperation.End);self.log.insertPlainText(text)
+        self.log.moveCursor(QTextCursor.MoveOperation.End);self.log.insertPlainText(text)
     def closeEvent(self,event):
         if self.runner.active or (self.dependencies.dirty() and not self.confirm('¿Descartar cambios sin guardar?')):event.ignore()
-        else:event.accept()
+        else:
+            self.preferences.setValue('geometry',self.saveGeometry())
+            self.preferences.setValue('horizontal',self.horizontal.saveState())
+            self.preferences.setValue('vertical',self.vertical.saveState())
+            event.accept()
 
 def main():
     app=QApplication(sys.argv);win=Window();win.show();return app.exec()
